@@ -24,10 +24,11 @@ class MastodonSender implements ChannelSenderInterface
         $socialMedia = $helper->buildSocialMediaAttachments($bodyHtml, $attachments, $includeExplicitAttachments);
         $cleanBodyHtml = $helper->removeAllImageTags($bodyHtml);
 
+        $subjectText = TextNormalizer::decode($subject);
         $plain = $this->htmlToText($cleanBodyHtml);
-        $status = trim($subject . "\n\n" . $plain);
+        $status = trim($subjectText . "\n\n" . $plain);
         if ($status === '') {
-            $status = $subject !== '' ? $subject : 'Post';
+            $status = $subjectText !== '' ? $subjectText : 'Post';
         }
         $status = $this->trimStatus($status);
 
@@ -84,7 +85,7 @@ class MastodonSender implements ChannelSenderInterface
         }
         $mimeType = (string) (($attachment['mimeType'] ?? '') ?: 'application/octet-stream');
         $filename = (string) (($attachment['filename'] ?? '') ?: basename($path));
-        $description = trim((string) (($attachment['title'] ?? '') ?: $filename));
+        $description = trim(TextNormalizer::decode((string) (($attachment['title'] ?? '') ?: $filename)));
 
         $response = $this->requestMultipartFile(
             $instanceUrl . '/api/v2/media',
@@ -214,7 +215,7 @@ class MastodonSender implements ChannelSenderInterface
     public function htmlToText(string $html): string
     {
         $text = str_ireplace(['<br>', '<br/>', '<br />', '</p>', '</div>', '</li>'], "\n", $html);
-        $text = html_entity_decode(strip_tags($text), ENT_QUOTES, 'UTF-8');
+        $text = TextNormalizer::decode(strip_tags($text));
         $text = preg_replace('/[ \t]+/', ' ', (string) $text);
         $text = preg_replace('/\n{3,}/', "\n\n", (string) $text);
         return trim((string) $text);
@@ -231,6 +232,6 @@ class MastodonSender implements ChannelSenderInterface
 
     public function attachmentLabel(array $attachment): string
     {
-        return (string) (($attachment['title'] ?? '') ?: ($attachment['filename'] ?? ($attachment['url'] ?? 'unknown file')));
+        return TextNormalizer::decode((string) (($attachment['title'] ?? '') ?: ($attachment['filename'] ?? ($attachment['url'] ?? 'unknown file'))));
     }
 }

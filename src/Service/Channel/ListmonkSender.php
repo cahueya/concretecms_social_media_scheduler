@@ -11,6 +11,7 @@ class ListmonkSender implements ChannelSenderInterface
     public function send(array $channel, string $subject, string $bodyHtml, array $attachments = []): string
     {
         $config = $channel['config'] ?? [];
+        $subject = TextNormalizer::decode($subject);
         $baseUrl = $this->normalizeBaseUrl((string) ($config['base_url'] ?? ($channel['publicEndpointUrl'] ?? '')));
         $username = (string) ($config['username'] ?? '');
         $password = (string) ($config['password'] ?? '');
@@ -91,7 +92,7 @@ class ListmonkSender implements ChannelSenderInterface
         foreach ($attachments as $attachment) {
             $path = (string) ($attachment['path'] ?? '');
             if ($path === '' || !is_readable($path)) {
-                $label = (string) (($attachment['title'] ?? '') ?: ($attachment['filename'] ?? ($attachment['url'] ?? 'unknown file')));
+                $label = TextNormalizer::decode((string) (($attachment['title'] ?? '') ?: ($attachment['filename'] ?? ($attachment['url'] ?? 'unknown file'))));
                 throw new \RuntimeException('Listmonk attachment cannot be uploaded because the local file is not readable: ' . $label);
             }
         }

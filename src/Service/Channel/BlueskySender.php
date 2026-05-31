@@ -28,10 +28,11 @@ class BlueskySender implements ChannelSenderInterface
         $cleanBodyHtml = $helper->removeAllImageTags($bodyHtml);
 
         $session = $this->createSession($service, $handle, $password);
+        $subjectText = TextNormalizer::decode($subject);
         $plain = $this->htmlToText($cleanBodyHtml);
-        $text = $this->trimPostText(trim($subject . "\n\n" . $plain));
+        $text = $this->trimPostText(trim($subjectText . "\n\n" . $plain));
         if ($text === '') {
-            $text = $this->trimPostText($subject !== '' ? $subject : 'Post');
+            $text = $this->trimPostText($subjectText !== '' ? $subjectText : 'Post');
         }
 
         $embedImages = [];
@@ -61,7 +62,7 @@ class BlueskySender implements ChannelSenderInterface
             }
             $blob = $this->uploadBlob($service, (string) $session['accessJwt'], $path, $mime);
             $embedImages[] = [
-                'alt' => (string) (($attachment['title'] ?? '') ?: ($attachment['filename'] ?? basename($path))),
+                'alt' => TextNormalizer::decode((string) (($attachment['title'] ?? '') ?: ($attachment['filename'] ?? basename($path)))),
                 'image' => $blob,
             ];
         }
@@ -185,7 +186,7 @@ class BlueskySender implements ChannelSenderInterface
     public function htmlToText(string $html): string
     {
         $text = str_ireplace(['<br>', '<br/>', '<br />', '</p>', '</div>', '</li>'], "\n", $html);
-        $text = html_entity_decode(strip_tags($text), ENT_QUOTES, 'UTF-8');
+        $text = TextNormalizer::decode(strip_tags($text));
         $text = preg_replace('/[ \t]+/', ' ', (string) $text);
         $text = preg_replace('/\n{3,}/', "\n\n", (string) $text);
         return trim((string) $text);
@@ -202,6 +203,6 @@ class BlueskySender implements ChannelSenderInterface
 
     public function attachmentLabel(array $attachment): string
     {
-        return (string) (($attachment['title'] ?? '') ?: ($attachment['filename'] ?? ($attachment['url'] ?? 'unknown file')));
+        return TextNormalizer::decode((string) (($attachment['title'] ?? '') ?: ($attachment['filename'] ?? ($attachment['url'] ?? 'unknown file'))));
     }
 }

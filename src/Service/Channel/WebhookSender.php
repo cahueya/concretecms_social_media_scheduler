@@ -31,11 +31,12 @@ class WebhookSender implements ChannelSenderInterface
             $attachmentMode = 'urls';
         }
 
-        $plain = trim(html_entity_decode(strip_tags(str_replace(['<br>', '<br/>', '<br />'], "\n", $bodyHtml)), ENT_QUOTES, 'UTF-8'));
+        $subjectText = TextNormalizer::decode($subject);
+        $plain = TextNormalizer::htmlToText($bodyHtml);
         $payload = [
             'posting' => [
                 'title' => (string) ($channel['_posting_title'] ?? ''),
-                'subject' => $subject,
+                'subject' => $subjectText,
                 'content_html' => $bodyHtml,
                 'content_text' => $plain,
             ],
@@ -123,7 +124,7 @@ class WebhookSender implements ChannelSenderInterface
         foreach ($attachments as $attachment) {
             $item = [
                 'filename' => (string) ($attachment['filename'] ?? ''),
-                'title' => (string) ($attachment['title'] ?? ''),
+                'title' => TextNormalizer::decode((string) ($attachment['title'] ?? '')),
                 'mime_type' => (string) ($attachment['mimeType'] ?? ''),
                 'size' => (int) ($attachment['size'] ?? 0),
                 'url' => (string) ($attachment['url'] ?? ''),

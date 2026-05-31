@@ -24,8 +24,9 @@ class MatrixSender implements ChannelSenderInterface
         $allAttachments = $helper->buildSocialMediaAttachments($bodyHtml, $attachments, $includeExplicitAttachments);
         $cleanBodyHtml = $helper->removeAllImageTags($bodyHtml);
 
-        $plain = trim($subject) . "\n\n" . trim(strip_tags(str_replace(['<br>', '<br/>', '<br />'], "\n", $cleanBodyHtml)));
-        $formatted = '<strong>' . htmlspecialchars($subject, ENT_QUOTES, 'UTF-8') . '</strong><br><br>' . $cleanBodyHtml;
+        $subjectText = TextNormalizer::decode($subject);
+        $plain = trim($subjectText . "\n\n" . TextNormalizer::htmlToText($cleanBodyHtml));
+        $formatted = '<strong>' . htmlspecialchars($subjectText, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8', false) . '</strong><br><br>' . TextNormalizer::decode($cleanBodyHtml);
         $uploaded = 0;
         $linkedFallback = 0;
 
@@ -48,12 +49,12 @@ class MatrixSender implements ChannelSenderInterface
 
                 $url = (string) ($attachment['url'] ?? '');
                 if ($url !== '') {
-                    $label = (string) (($attachment['title'] ?? '') ?: ($attachment['filename'] ?? $url));
+                    $label = TextNormalizer::decode((string) (($attachment['title'] ?? '') ?: ($attachment['filename'] ?? $url)));
                     $this->sendRoomMessage($homeserver, $accessToken, (string) $roomId, [
                         'msgtype' => $msgtype,
                         'body' => $label . "\n" . $url,
                         'format' => 'org.matrix.custom.html',
-                        'formatted_body' => '<a href="' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</a>',
+                        'formatted_body' => '<a href="' . htmlspecialchars($url, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8', false) . '">' . htmlspecialchars($label, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8', false) . '</a>',
                     ]);
                     $linkedFallback++;
                 }

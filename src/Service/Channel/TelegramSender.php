@@ -77,7 +77,7 @@ class TelegramSender implements ChannelSenderInterface
                 $payload['parse_mode'] = $parseMode;
             }
         } elseif (!empty($attachment['title']) || !empty($attachment['filename'])) {
-            $payload['caption'] = mb_substr((string) (($attachment['title'] ?? '') ?: ($attachment['filename'] ?? '')), 0, 1024);
+            $payload['caption'] = mb_substr(TextNormalizer::decode((string) (($attachment['title'] ?? '') ?: ($attachment['filename'] ?? ''))), 0, 1024);
         }
 
         $this->request($token, $method, $payload);
@@ -112,10 +112,11 @@ class TelegramSender implements ChannelSenderInterface
 
     public function messageText(string $subject, string $bodyHtml, string $parseMode): string
     {
+        $subject = TextNormalizer::decode($subject);
         if ($parseMode === 'HTML') {
-            return '<b>' . htmlspecialchars($subject, ENT_QUOTES, 'UTF-8') . '</b>' . "\n\n" . $bodyHtml;
+            return '<b>' . htmlspecialchars($subject, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8', false) . '</b>' . "\n\n" . TextNormalizer::decode($bodyHtml);
         }
-        $plain = trim(strip_tags(str_replace(['<br>', '<br/>', '<br />'], "\n", $bodyHtml)));
+        $plain = TextNormalizer::htmlToText($bodyHtml);
         if ($parseMode === 'MarkdownV2') {
             return '*' . $this->escapeMarkdownV2($subject) . "*\n\n" . $this->escapeMarkdownV2($plain);
         }

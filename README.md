@@ -2,7 +2,7 @@
 
 Social Media Scheduler is a ConcreteCMS package for scheduled and recurring publishing to multiple communication and social-media channels.
 
-Current version: **0.6.3**
+Current version: **0.6.4**
 
 The package is built for:
 
@@ -11,7 +11,7 @@ The package is built for:
 
 ## Supported channels
 
-Version **0.6.3** supports:
+Version **0.6.4** supports:
 
 - Telegram via Bot API
 - Listmonk email campaigns
@@ -67,14 +67,14 @@ The parent page **Social Media Scheduler** redirects to **Posts**.
 
 ## Fresh install recommendation for 0.6.x
 
-Version 0.6.0 introduced Doctrine ORM entities for package-owned persistence. Version 0.6.3 is the current clean release line after the pre-release 0.5.x builds.
+Version 0.6.0 introduced Doctrine ORM entities for package-owned persistence. Version 0.6.4 is the current clean release line after the pre-release 0.5.x builds.
 
 For a clean release setup, start from a fresh install:
 
 1. Back up any old pre-release data if needed.
 2. Uninstall the old pre-release package.
 3. Confirm that the package tables were removed.
-4. Install version 0.6.3.
+4. Install version 0.6.4.
 5. Recreate channel configurations and test postings.
 
 ## Uninstall
@@ -196,6 +196,7 @@ Additional documentation:
 
 - `docs/ARCHITECTURE.md`
 - `docs/CHANNELS.md`
+- `docs/RELEASE_NOTES_0.6.4.md`
 - `docs/RELEASE_NOTES_0.6.3.md`
 - `docs/RELEASE_NOTES_0.6.2.md`
 - `CHANGELOG.md`

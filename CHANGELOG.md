@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.4
+
+- Normalize HTML entities before text-oriented channel sending.
+- Fix Telegram plain mode showing entities like `&amp;uuml;` instead of UTF-8 characters such as `ü`.
+- Decode subjects for Telegram, Matrix, Bluesky, Mastodon, Webhook and Listmonk campaign subjects.
+- Keep Listmonk HTML body output unchanged while normalizing the subject.
+- Add shared `TextNormalizer` helper for channel senders.
+
 ## 0.6.3
 
 - Added required end date/time field for postings.

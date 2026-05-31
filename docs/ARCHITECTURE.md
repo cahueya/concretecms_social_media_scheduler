@@ -1,6 +1,6 @@
 # Social Media Scheduler Architecture
 
-Version: **0.6.3**
+Version: **0.6.4**
 
 This document describes the internal architecture of the Social Media Scheduler package for ConcreteCMS 9.4+.
 
@@ -132,7 +132,7 @@ BlueskySender.php
 MastodonSender.php
 ```
 
-`XSender.php` may exist in the codebase, but X/Twitter is not exposed as a selectable channel in 0.6.3 because the connector has not been fully verified with paid X API write access.
+`XSender.php` may exist in the codebase, but X/Twitter is not exposed as a selectable channel in 0.6.4 because the connector has not been fully verified with paid X API write access.
 
 The runner maps the selected channel type to a sender and passes:
 
@@ -215,3 +215,19 @@ SocialMediaSchedulerPostings
 ```
 
 This is intentional for a clean release package. Users should back up data before uninstalling.
+
+## Text normalization
+
+Rich text editor content can contain HTML entities such as `&amp;uuml;` or `&amp;auml;`. Social and messenger APIs generally expect UTF-8 text, not browser-rendered HTML entities.
+
+Version 0.6.4 therefore normalizes text before channel submission:
+
+- Subjects are decoded to UTF-8 for all sender-facing text payloads.
+- Telegram plain mode sends decoded UTF-8 text.
+- Telegram HTML mode decodes first, then escapes only Telegram-relevant HTML control characters.
+- Matrix `body` is decoded plain text; `formatted_body` is decoded HTML.
+- Bluesky and Mastodon status text is decoded UTF-8.
+- Webhook `content_text` is decoded UTF-8.
+- Listmonk keeps the HTML body intact for e-mail rendering, but decodes the campaign subject.
+
+This prevents output such as `f&amp;uuml;r` from appearing in Telegram or other text channels.

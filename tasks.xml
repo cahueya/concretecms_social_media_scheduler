@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<concrete5-cif version="1.0">
+    <tasks>
+        <task handle="submit_social_postings" package="social_media_scheduler"/>
+    </tasks>
+    <tasksets>
+        <taskset handle="social_media_scheduler" name="Social Media Scheduler" package="social_media_scheduler">
+            <task handle="submit_social_postings"/>
+        </taskset>
+    </tasksets>
+</concrete5-cif>

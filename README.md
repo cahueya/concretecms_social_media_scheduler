@@ -2,7 +2,7 @@
 
 Social Media Scheduler is a ConcreteCMS package for scheduled and recurring publishing to multiple communication and social-media channels.
 
-Current version: **0.6.2**
+Current version: **0.6.3**
 
 The package is built for:
 
@@ -11,7 +11,7 @@ The package is built for:
 
 ## Supported channels
 
-Version **0.6.2** supports:
+Version **0.6.3** supports:
 
 - Telegram via Bot API
 - Listmonk email campaigns
@@ -34,6 +34,7 @@ A posting has:
 | Subject | Public subject. Used as Listmonk email subject and as first line/part of social messages. |
 | Body | Rich-text content from the ConcreteCMS editor. |
 | Start date/time | First scheduled send time. |
+| End date/time | Last date/time after which the posting will no longer be sent. |
 | Repeat every X days | Recurrence interval. `0` means one-time posting. |
 | Timezone | Timezone used for the scheduled date/time. |
 | Attachments | Explicit ConcreteCMS File Manager attachments, mainly for Listmonk/email. |
@@ -66,14 +67,14 @@ The parent page **Social Media Scheduler** redirects to **Posts**.
 
 ## Fresh install recommendation for 0.6.x
 
-Version 0.6.0 introduced Doctrine ORM entities for package-owned persistence. Version 0.6.2 is intended as the clean release line after the pre-release 0.5.x builds.
+Version 0.6.0 introduced Doctrine ORM entities for package-owned persistence. Version 0.6.3 is the current clean release line after the pre-release 0.5.x builds.
 
 For a clean release setup, start from a fresh install:
 
 1. Back up any old pre-release data if needed.
 2. Uninstall the old pre-release package.
 3. Confirm that the package tables were removed.
-4. Install version 0.6.2.
+4. Install version 0.6.3.
 5. Recreate channel configurations and test postings.
 
 ## Uninstall
@@ -97,7 +98,7 @@ Task handle:
 submit_social_postings
 ```
 
-The task sends all enabled postings whose `nextRunAt` value is due.
+The task sends all enabled postings whose `nextRunAt` value is due and whose end date has not passed.
 
 It can be run manually from the ConcreteCMS task dashboard or through the normal ConcreteCMS cron/task runner setup.
 
@@ -108,7 +109,7 @@ Task flow:
 3. Send the posting to every selected channel.
 4. Write a log entry for each channel attempt.
 5. Apply retry logic if a send fails.
-6. Advance the posting to the next cycle or disable it if it is a one-time posting.
+6. Advance the posting to the next cycle, or disable it if it is a one-time posting or if the next cycle would be after the end date.
 
 ## Media policy
 
@@ -195,5 +196,6 @@ Additional documentation:
 
 - `docs/ARCHITECTURE.md`
 - `docs/CHANNELS.md`
+- `docs/RELEASE_NOTES_0.6.3.md`
 - `docs/RELEASE_NOTES_0.6.2.md`
 - `CHANGELOG.md`

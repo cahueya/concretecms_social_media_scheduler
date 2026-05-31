@@ -1,6 +1,6 @@
 # Social Media Scheduler Architecture
 
-Version: **0.6.2**
+Version: **0.6.3**
 
 This document describes the internal architecture of the Social Media Scheduler package for ConcreteCMS 9.4+.
 
@@ -132,7 +132,7 @@ BlueskySender.php
 MastodonSender.php
 ```
 
-`XSender.php` may exist in the codebase, but X/Twitter is not exposed as a selectable channel in 0.6.2 because the connector has not been fully verified with paid X API write access.
+`XSender.php` may exist in the codebase, but X/Twitter is not exposed as a selectable channel in 0.6.3 because the connector has not been fully verified with paid X API write access.
 
 The runner maps the selected channel type to a sender and passes:
 

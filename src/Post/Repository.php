@@ -82,6 +82,7 @@ class Repository
         string $subject,
         string $bodyHtml,
         string $startAt,
+        ?string $endAt,
         int $repeatDays,
         array $channelIDs,
         ?int $id = null,
@@ -93,6 +94,7 @@ class Repository
         $now = $this->newDateTime();
         $timezone = $this->normalizeTimezone($timezone);
         $startAtServer = $this->convertToServerDateTime($startAt, $timezone);
+        $endAtServer = trim((string) $endAt) !== '' ? $this->convertToServerDateTime((string) $endAt, $timezone) : null;
         $attachmentFileIDs = array_values(array_filter(array_unique(array_map('intval', $attachmentFileIDs))));
 
         $posting = $id ? $this->em->find(Posting::class, $id) : null;
@@ -108,6 +110,7 @@ class Repository
             ->setSubject($subject)
             ->setBodyHtml(LinkAbstractor::translateTo($bodyHtml))
             ->setStartAt($startAtServer)
+            ->setEndAt($endAtServer)
             ->setNextRunAt($startAtServer)
             ->setRepeatEveryDays(max(0, $repeatDays))
             ->setTimezone($timezone)
@@ -165,6 +168,7 @@ class Repository
             ->from(Posting::class, 'p')
             ->where('p.isEnabled = :enabled')
             ->andWhere('p.nextRunAt <= :now')
+            ->andWhere('(p.endAt IS NULL OR p.endAt >= :now)')
             ->setParameter('enabled', true)
             ->setParameter('now', $this->newDateTime())
             ->orderBy('p.nextRunAt', 'ASC')
@@ -181,9 +185,14 @@ class Repository
             return;
         }
         $now = $this->newDateTime();
+        $endAt = $posting->getEndAt();
         if ($repeatDays > 0) {
             $next = $now->modify('+' . $repeatDays . ' days');
-            $posting->setLastRunAt($now)->setNextRunAt($next)->setRetryCount(0)->setDateUpdated($now);
+            if ($endAt instanceof DateTimeInterface && $next > $endAt) {
+                $posting->setLastRunAt($now)->setIsEnabled(false)->setRetryCount(0)->setDateUpdated($now);
+            } else {
+                $posting->setLastRunAt($now)->setNextRunAt($next)->setRetryCount(0)->setDateUpdated($now);
+            }
         } else {
             $posting->setLastRunAt($now)->setIsEnabled(false)->setRetryCount(0)->setDateUpdated($now);
         }
@@ -198,7 +207,12 @@ class Repository
         }
         $now = $this->newDateTime();
         $next = $now->modify('+' . max(1, $retryDelayMinutes) . ' minutes');
-        $posting->incrementRetryCount()->setNextRunAt($next)->setDateUpdated($now);
+        $endAt = $posting->getEndAt();
+        if ($endAt instanceof DateTimeInterface && $next > $endAt) {
+            $posting->incrementRetryCount()->setIsEnabled(false)->setDateUpdated($now);
+        } else {
+            $posting->incrementRetryCount()->setNextRunAt($next)->setDateUpdated($now);
+        }
         $this->em->flush();
     }
 
@@ -528,6 +542,7 @@ class Repository
             'bodyHtml' => $posting->getBodyHtml(),
             'startAt' => $this->formatDate($posting->getStartAt()),
             'nextRunAt' => $this->formatDate($posting->getNextRunAt()),
+            'endAt' => $this->formatDate($posting->getEndAt()),
             'repeatEveryDays' => $posting->getRepeatEveryDays(),
             'timezone' => $posting->getTimezone(),
             'attachmentFileIDs' => $posting->getAttachmentFileIDs(),

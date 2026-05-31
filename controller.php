@@ -14,7 +14,7 @@ class Controller extends Package implements ProviderAggregateInterface
 {
     protected $pkgHandle = 'social_media_scheduler';
     protected $appVersionRequired = '9.4.0';
-    protected $pkgVersion = '0.6.2';
+    protected $pkgVersion = '0.6.3';
     protected $pkgAutoloaderRegistries = [
         'src' => 'Concrete\\Package\\SocialMediaScheduler\\Src',
     ];

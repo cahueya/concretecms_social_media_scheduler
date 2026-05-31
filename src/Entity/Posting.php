@@ -32,6 +32,9 @@ class Posting
     /** @ORM\Column(type="datetime") */
     protected ?\DateTimeInterface $nextRunAt = null;
 
+    /** @ORM\Column(type="datetime", nullable=true) */
+    protected ?\DateTimeInterface $endAt = null;
+
     /** @ORM\Column(type="integer", options={"unsigned": true, "default": 0}) */
     protected int $repeatEveryDays = 0;
 
@@ -73,6 +76,8 @@ class Posting
     public function setStartAt(\DateTimeInterface $value): self { $this->startAt = $value; return $this; }
     public function getNextRunAt(): ?\DateTimeInterface { return $this->nextRunAt; }
     public function setNextRunAt(\DateTimeInterface $value): self { $this->nextRunAt = $value; return $this; }
+    public function getEndAt(): ?\DateTimeInterface { return $this->endAt; }
+    public function setEndAt(?\DateTimeInterface $value): self { $this->endAt = $value; return $this; }
     public function getRepeatEveryDays(): int { return $this->repeatEveryDays; }
     public function setRepeatEveryDays(int $value): self { $this->repeatEveryDays = max(0, $value); return $this; }
     public function getTimezone(): ?string { return $this->timezone; }

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.3
+
+- Added required end date/time field for postings.
+- Due postings are no longer selected after their end date has passed.
+- Repeating postings are automatically disabled when the next calculated run would be after the end date.
+- Retry scheduling now respects the posting end date.
+- Added ORM schema upgrade guard for the new `endAt` column.
+
 ## 0.6.2
 
 - Removed X/Twitter from the selectable channel list.

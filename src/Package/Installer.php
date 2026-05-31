@@ -104,9 +104,28 @@ class Installer
             if ($metadata) {
                 (new SchemaTool($em))->createSchema($metadata);
             }
+            $this->ensurePostingEndAtColumn();
         } catch (\Throwable $e) {
             // parent::install()/parent::upgrade() normally creates package entity tables.
             // Keep install resilient; runtime errors will reveal schema issues during testing.
+        }
+    }
+
+
+    public function ensurePostingEndAtColumn(): void
+    {
+        /** @var Connection $db */
+        $db = $this->app->make(Connection::class);
+        try {
+            $schema = $db->createSchemaManager();
+            if (!$schema->tablesExist(['SocialMediaSchedulerPostings'])) {
+                return;
+            }
+            $columns = array_change_key_case($schema->listTableColumns('SocialMediaSchedulerPostings'), CASE_LOWER);
+            if (!isset($columns['endat'])) {
+                $db->executeStatement('ALTER TABLE SocialMediaSchedulerPostings ADD endAt DATETIME DEFAULT NULL AFTER nextRunAt');
+            }
+        } catch (\Throwable $e) {
         }
     }
 

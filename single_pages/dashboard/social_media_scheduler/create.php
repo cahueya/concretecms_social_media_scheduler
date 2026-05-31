@@ -71,11 +71,16 @@ $renderAttachmentSelectors = static function (string $prefix, array $attachmentI
         <div class="form-text"><?= t('Uses the same rich text editor mode as the Concrete CMS Content block. For messenger channels the subject is prepended as the first line.') ?></div>
     </div>
     <div class="row">
-        <div class="col-md-4 mb-3">
+        <div class="col-md-3 mb-3">
             <label class="form-label"><?= t('Start Date / Time') ?></label>
             <input type="datetime-local" name="startAt" class="form-control" required>
         </div>
-        <div class="col-md-4 mb-3">
+        <div class="col-md-3 mb-3">
+            <label class="form-label"><?= t('End Date / Time') ?></label>
+            <input type="datetime-local" name="endAt" class="form-control" required>
+            <div class="form-text"><?= t('The posting will not be sent after this date.') ?></div>
+        </div>
+        <div class="col-md-3 mb-3">
             <label class="form-label"><?= t('Timezone') ?></label>
             <select name="timezone" class="form-select">
                 <?php foreach ($timezones as $tz): ?>
@@ -83,7 +88,7 @@ $renderAttachmentSelectors = static function (string $prefix, array $attachmentI
                 <?php endforeach; ?>
             </select>
         </div>
-        <div class="col-md-4 mb-3">
+        <div class="col-md-3 mb-3">
             <label class="form-label"><?= t('Repeat every X days') ?></label>
             <input type="number" min="0" name="repeatEveryDays" class="form-control" value="7">
             <div class="form-text"><?= t('Use 0 for a one-time posting.') ?></div>

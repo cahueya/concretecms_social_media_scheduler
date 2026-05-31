@@ -33,17 +33,22 @@ class Create extends DashboardPageController
         $subject = trim((string) $this->post('subject'));
         $body = (string) $this->post('bodyHtml');
         $startAt = (string) $this->post('startAt');
+        $endAt = (string) $this->post('endAt');
         $repeatDays = max(0, (int) $this->post('repeatEveryDays'));
         $channelIDs = (array) $this->post('channelIDs');
         $timezone = (string) $this->post('timezone');
         $attachmentFileIDs = $this->parseAttachmentFileIDs();
         $maxAttempts = max(1, (int) $this->post('maxAttempts'));
         $retryDelayMinutes = max(1, (int) $this->post('retryDelayMinutes'));
-        if ($subject === '' || trim(strip_tags($body)) === '' || empty($channelIDs)) {
-            $this->flash('error', t('Subject, content and at least one channel are required.'));
+        if ($subject === '' || trim(strip_tags($body)) === '' || $startAt === '' || $endAt === '' || empty($channelIDs)) {
+            $this->flash('error', t('Subject, content, start date, end date and at least one channel are required.'));
             return $this->buildRedirect('/dashboard/social_media_scheduler/create');
         }
-        $this->repository()->savePosting($title, $subject, $body, $startAt, $repeatDays, $channelIDs, null, $timezone, $attachmentFileIDs, $maxAttempts, $retryDelayMinutes);
+        if (strtotime($endAt) !== false && strtotime($startAt) !== false && strtotime($endAt) < strtotime($startAt)) {
+            $this->flash('error', t('End date must be after the start date.'));
+            return $this->buildRedirect('/dashboard/social_media_scheduler/create');
+        }
+        $this->repository()->savePosting($title, $subject, $body, $startAt, $endAt, $repeatDays, $channelIDs, null, $timezone, $attachmentFileIDs, $maxAttempts, $retryDelayMinutes);
         $this->flash('success', t('Posting submitted.'));
         return $this->buildRedirect('/dashboard/social_media_scheduler/create');
     }

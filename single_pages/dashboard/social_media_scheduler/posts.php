@@ -62,7 +62,7 @@ $renderAttachmentSelectors = static function (string $prefix, array $attachmentI
             <h2 class="accordion-header" id="heading-<?= (int) $posting['id'] ?>">
                 <button class="accordion-button collapsed d-flex align-items-center gap-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-<?= (int) $posting['id'] ?>">
                     <span class="me-2"><strong><?= h(($posting['title'] ?? '') ?: $posting['subject']) ?></strong></span>
-                    <small class="text-muted me-2"><?= h($formatPostingDate((string) $posting['startAt'], (string) ($posting['timezone'] ?: $timezone))) ?> · <?= (int) $posting['repeatEveryDays'] ?> <?= t('days') ?></small>
+                    <small class="text-muted me-2"><?= h($formatPostingDate((string) $posting['startAt'], (string) ($posting['timezone'] ?: $timezone))) ?> – <?= h($formatPostingDate((string) ($posting['endAt'] ?? ''), (string) ($posting['timezone'] ?: $timezone))) ?> · <?= (int) $posting['repeatEveryDays'] ?> <?= t('days') ?></small>
                     <span class="me-2"><?php foreach ($posting['channels'] as $channel) echo $channelIcon((string) $channel['channelType']) . ' '; ?></span>
                     <?php if (!$posting['isEnabled']): ?><span class="badge bg-secondary ms-auto me-3"><?= t('Disabled') ?></span><?php else: ?><span class="ms-auto me-3"></span><?php endif; ?>
                 </button>
@@ -115,9 +115,10 @@ $renderAttachmentSelectors = static function (string $prefix, array $attachmentI
                             <?= $editor->outputBlockEditModeEditor('bodyHtml_' . (int) $posting['id'], (string) $posting['bodyHtml']) ?>
                         </div>
                         <div class="row">
-                            <div class="col-md-4 mb-3"><label class="form-label"><?= t('Start Date / Time') ?></label><input type="datetime-local" name="startAt" class="form-control" value="<?= h(str_replace(' ', 'T', substr((string) $posting['startAt'], 0, 16))) ?>" required></div>
-                            <div class="col-md-4 mb-3"><label class="form-label"><?= t('Timezone') ?></label><select name="timezone" class="form-select"><?php foreach ($timezones as $tz): ?><option value="<?= h($tz) ?>" <?= $tz === ($posting['timezone'] ?: $timezone) ? 'selected' : '' ?>><?= h($tz) ?></option><?php endforeach; ?></select></div>
-                            <div class="col-md-4 mb-3"><label class="form-label"><?= t('Repeat every X days') ?></label><input type="number" min="0" name="repeatEveryDays" class="form-control" value="<?= (int) $posting['repeatEveryDays'] ?>"></div>
+                            <div class="col-md-3 mb-3"><label class="form-label"><?= t('Start Date / Time') ?></label><input type="datetime-local" name="startAt" class="form-control" value="<?= h(str_replace(' ', 'T', substr((string) $posting['startAt'], 0, 16))) ?>" required></div>
+                            <div class="col-md-3 mb-3"><label class="form-label"><?= t('End Date / Time') ?></label><input type="datetime-local" name="endAt" class="form-control" value="<?= h(str_replace(' ', 'T', substr((string) ($posting['endAt'] ?? ''), 0, 16))) ?>" required><div class="form-text"><?= t('The posting will not be sent after this date.') ?></div></div>
+                            <div class="col-md-3 mb-3"><label class="form-label"><?= t('Timezone') ?></label><select name="timezone" class="form-select"><?php foreach ($timezones as $tz): ?><option value="<?= h($tz) ?>" <?= $tz === ($posting['timezone'] ?: $timezone) ? 'selected' : '' ?>><?= h($tz) ?></option><?php endforeach; ?></select></div>
+                            <div class="col-md-3 mb-3"><label class="form-label"><?= t('Repeat every X days') ?></label><input type="number" min="0" name="repeatEveryDays" class="form-control" value="<?= (int) $posting['repeatEveryDays'] ?>"></div>
                         </div>
                         <div class="row">
                             <div class="col-md-4 mb-3">

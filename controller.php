@@ -13,7 +13,7 @@ use Concrete\Package\SocialMediaScheduler\Src\Package\Installer;
 class Controller extends Package implements ProviderAggregateInterface
 {
     protected $pkgHandle = 'social_media_scheduler';
-    protected $appVersionRequired = '9.4.0';
+    protected $appVersionRequired = '9.0.0';
     protected $pkgVersion = '0.6.6';
     protected $pkgAutoloaderRegistries = [
         'src' => 'Concrete\\Package\\SocialMediaScheduler\\Src',

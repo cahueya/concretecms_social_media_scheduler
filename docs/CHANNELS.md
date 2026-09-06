@@ -1,160 +1,107 @@
 # Channel Documentation
 
-Version: **0.6.2**
-
-This document describes how each channel behaves and which credentials are required.
+Version: **0.6.6**
 
 ## General content mapping
 
-Each posting contains:
-
 | Field | Meaning |
 |---|---|
-| Title | Internal title only. Never sent. |
-| Subject | Public subject. Used as email subject or first line/part of social text. |
+| Title | Internal dashboard title; never sent. |
+| Subject | Public subject or leading social/messenger text. |
 | Body | Rich-text editor content. |
-| Body media | Images inserted into the editor body. |
-| Attachments | Files selected with the File Manager attachment fields. |
+| Body media | Images inserted into the body. |
+| Explicit attachments | Files selected with the ConcreteCMS File Manager. |
 
-## Media rules
-
-Default behavior:
-
-- **Listmonk** uses body images inline and explicit attachments as email/campaign attachments.
-- **Telegram, Matrix, Bluesky and Mastodon** use body images as social media assets.
-- **Telegram, Matrix, Bluesky and Mastodon** ignore explicit attachments by default.
-- Explicit attachments can be included for social/messenger channels only when the channel option is enabled.
-- **Webhook** receives structured data for both body media and attachments.
+Telegram, Matrix, Bluesky and Mastodon use body images by default and only include explicit attachments when that channel option is enabled. Listmonk uses both according to its email/media behavior. Webhook always receives attachment metadata and may additionally transfer attachment content depending on the configured attachment mode.
 
 ## Telegram
-
-### Credentials
 
 Required:
 
 - Bot token
-- Chat ID
+- one or more chat/group/channel IDs
 
-The bot must be allowed to post in the target group/channel.
+Options include parse mode, link-preview behavior and explicit attachments.
 
-### Chat ID discovery
+Telegram chat discovery uses `getUpdates`. The server must be able to reach the Telegram Bot API.
 
-Telegram chat discovery uses Bot API updates. If discovery does not work because Telegram is blocked by the local network, the chat ID can be obtained manually using `getUpdates` from a network that can reach Telegram.
+Sending behavior:
 
-### Sending behavior
-
-- Subject and body are combined into the Telegram message.
-- If one body image exists and the text is short enough, the text can be used as image caption.
-- If multiple media items exist, the text is sent first and the media follows.
-- Images use Telegram photo upload where possible.
-- Other files use document upload when explicit attachment sending is enabled.
-
-### Notes
-
-Telegram API access must be possible from the server where ConcreteCMS runs. A local VPN/DNS issue can prevent discovery or sending even when the token is correct.
+- subject and body form the message;
+- a single suitable image may carry the message as caption;
+- otherwise text and media are sent separately;
+- body images are considered media;
+- explicit attachments are optional.
 
 ## Listmonk
 
-### Credentials
-
 Required:
 
-- Base URL
+- base URL
 - API username
 - API token/password
+- one or more list IDs
 
-Example base URL:
+Optional settings include template ID, from address, messenger and initial campaign status.
 
-```text
-https://newsletter.example.com
-```
+Sending behavior:
 
-### Sending behavior
-
-- Subject becomes the Listmonk campaign subject.
-- Body is sent as HTML email content.
-- Body images are uploaded to Listmonk media and embedded into the HTML body.
-- Explicit attachments are uploaded as Listmonk media/campaign attachments.
-- Body images and explicit attachments are not mixed.
-
-### Options
-
-Depending on configuration, a campaign can be created as:
-
-- draft
-- running
-- scheduled
+- subject becomes the campaign subject;
+- body remains HTML;
+- editor images are uploaded to Listmonk media and their body URLs are replaced;
+- explicit attachments are uploaded and referenced as campaign media;
+- campaign can remain draft or be moved to the configured start status.
 
 ## Matrix
 
-### Credentials
-
 Required:
 
-- Homeserver URL
-- Access token
-- Room ID
+- homeserver URL
+- access token
+- one or more room IDs
 
-### Sending behavior
+Options include Matrix message type and explicit attachments.
 
-- The text message is sent first.
-- `<img>` tags are removed from the Matrix text message to avoid broken placeholders.
-- Body images are uploaded to the Matrix media repository.
-- Uploaded media is sent as separate `m.image` or `m.file` events.
-- Explicit attachments are ignored unless enabled in the channel option.
+Sending behavior:
 
-### Recommended behavior
-
-For Matrix, use body images in the editor when the image should be part of the post. Avoid using explicit attachments unless you intentionally want them sent as files.
+- text is sent first;
+- local editor image tags are removed from the text body;
+- body images are uploaded to the Matrix media repository and sent as media events;
+- explicit attachments are optional.
 
 ## Generic Webhook
 
-### Credentials
-
 Required:
 
-- Webhook URL
+- webhook URL
 
-Optional:
+Options:
 
-- HTTP method: POST, PUT or PATCH
-- Authentication: none, basic, bearer, custom headers
-- Payload mode: JSON, form-data or multipart
+- method: POST, PUT or PATCH
+- payload mode: JSON, form or multipart
+- attachment mode: URLs, Base64 or multipart
+- authentication: none, Basic or Bearer
+- additional headers
 
-### Basic Auth
-
-For n8n Basic Auth, configure:
-
-- Authentication: Basic Auth
-- Username
-- API token/password
-
-The package creates the `Authorization: Basic ...` header automatically.
-
-### Sending behavior
-
-Webhook receives structured posting data. It is the most flexible connector and is useful for n8n, Make, Zapier or custom APIs.
-
-Typical JSON structure:
+Current structured payload:
 
 ```json
 {
   "posting": {
-    "id": 12,
     "title": "Internal title",
     "subject": "Public subject",
     "content_html": "<p>...</p>",
-    "content_text": "...",
-    "timezone": "Africa/Dar_es_Salaam"
+    "content_text": "..."
   },
-  "schedule": {
-    "next_run_at": "2026-05-31 10:00:00",
-    "repeat_every_days": 7
-  },
-  "media": {
-    "body_media": [],
-    "attachments": []
-  },
+  "attachments": [
+    {
+      "filename": "document.pdf",
+      "title": "Document",
+      "mime_type": "application/pdf",
+      "size": 12345,
+      "url": "https://example.com/application/files/.../document.pdf"
+    }
+  ],
   "source": {
     "system": "concretecms",
     "package": "social_media_scheduler"
@@ -162,76 +109,59 @@ Typical JSON structure:
 }
 ```
 
-## Bluesky
+When attachment mode is `base64`, readable local files additionally receive a `base64` field. With multipart transfer, readable local files are sent as multipart file fields in addition to the serialized payload.
 
-### Credentials
+If an `Authorization` header is supplied manually, it takes precedence over generated Basic/Bearer authentication.
+
+## Bluesky
 
 Required:
 
-- Handle
+- handle
 - App Password
-- PDS/API Service URL
+- PDS/API service URL
 
-For normal Bluesky accounts, the service URL should be:
+For standard Bluesky accounts use:
 
 ```text
 https://bsky.social
 ```
 
-Do not use:
+`https://bsky.app` is the web UI and is normalized to `https://bsky.social`.
 
-```text
-https://bsky.app
-```
+Sending behavior:
 
-`bsky.app` is the web client, not the API/PDS endpoint. Version 0.6.1+ normalizes `https://bsky.app` to `https://bsky.social`, but it is better to enter the correct API URL.
+- subject and body become normalized plain post text;
+- body images are uploaded as blobs;
+- up to four images are embedded;
+- explicit attachments are optional;
+- oversized/non-uploadable images fail with a clear error.
 
-### Sending behavior
-
-- Subject and body are converted to post text.
-- Body images are uploaded as blobs and embedded in the post.
-- Bluesky supports a limited number of images per post. The package uses up to 4 images.
-- Explicit attachments are ignored unless enabled in the channel option.
-
-### Recommended credentials
-
-Use a Bluesky App Password, not your main account password.
+Use an App Password rather than the main account password.
 
 ## Mastodon
 
-### Credentials
-
 Required:
 
-- Instance URL
-- Access Token
+- instance URL
+- access token with write permissions
 
-Optional/channel-specific:
+Options:
 
-- Visibility
-- Language
-- Sensitive flag
-- Content warning
+- visibility
+- language
+- sensitive-media flag
+- content warning
+- explicit attachments
 
-### Sending behavior
+Sending behavior:
 
-- Subject and body are converted to status text.
-- Body images are uploaded to the Mastodon media endpoint.
-- The returned media IDs are attached to the status.
-- Explicit attachments are ignored unless enabled in the channel option.
-
-### Access token
-
-Create a Mastodon application in your instance settings and copy the access token. Required scopes normally include write access, for example `write` or more specific write scopes depending on the instance UI.
+- subject and body become normalized status text;
+- images are uploaded through the Mastodon media API and attached to the status;
+- explicit attachments are optional.
 
 ## X / Twitter
 
-X/Twitter is not selectable in version 0.6.2.
+X/Twitter is intentionally **not selectable in 0.6.6**.
 
-Reason:
-
-- Posting requires X API write access.
-- In testing, access led to the X payment/API plan flow.
-- The connector should not be exposed until it has been verified with a suitable paid API plan and write permissions.
-
-The code may remain in the package for later reactivation, but it is intentionally not part of the channel configuration UI in this release.
+`src/Service/Channel/XSender.php` remains in the codebase for possible future reactivation, but it is not registered in `SenderRegistry` and no X configuration UI is exposed. Reactivation should only happen after verified API write access and end-to-end testing against the chosen X API plan.

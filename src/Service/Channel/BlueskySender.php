@@ -7,17 +7,13 @@ class BlueskySender implements ChannelSenderInterface
 {
     public const SAFE_IMAGE_LIMIT_BYTES = 1000000;
 
-    public function supports(string $type): bool
-    {
-        return $type === 'bluesky';
-    }
 
     public function send(array $channel, string $subject, string $bodyHtml, array $attachments = []): string
     {
         $config = $channel['config'] ?? [];
         $handle = trim((string) ($config['handle'] ?? ''));
         $password = (string) ($config['app_password'] ?? '');
-        $service = $this->normalizeServiceUrl((string) ($config['service_url'] ?? 'https://bsky.social'));
+        $service = self::normalizeServiceUrl((string) ($config['service_url'] ?? 'https://bsky.social'));
         if ($handle === '' || $password === '') {
             throw new \RuntimeException('Bluesky handle or app password missing.');
         }
@@ -29,7 +25,7 @@ class BlueskySender implements ChannelSenderInterface
 
         $session = $this->createSession($service, $handle, $password);
         $subjectText = TextNormalizer::decode($subject);
-        $plain = $this->htmlToText($cleanBodyHtml);
+        $plain = TextNormalizer::htmlToText($cleanBodyHtml);
         $text = $this->trimPostText(trim($subjectText . "\n\n" . $plain));
         if ($text === '') {
             $text = $this->trimPostText($subjectText !== '' ? $subjectText : 'Post');
@@ -94,7 +90,7 @@ class BlueskySender implements ChannelSenderInterface
         );
     }
 
-    public function normalizeServiceUrl(string $service): string
+    public static function normalizeServiceUrl(string $service): string
     {
         $service = trim($service);
         if ($service === '') {
@@ -181,15 +177,6 @@ class BlueskySender implements ChannelSenderInterface
             throw new \RuntimeException('Bluesky returned HTTP ' . $code . ': ' . mb_substr((string) $response, 0, 1000) . $hint);
         }
         return ['code' => $code, 'body' => (string) $response];
-    }
-
-    public function htmlToText(string $html): string
-    {
-        $text = str_ireplace(['<br>', '<br/>', '<br />', '</p>', '</div>', '</li>'], "\n", $html);
-        $text = TextNormalizer::decode(strip_tags($text));
-        $text = preg_replace('/[ \t]+/', ' ', (string) $text);
-        $text = preg_replace('/\n{3,}/', "\n\n", (string) $text);
-        return trim((string) $text);
     }
 
     public function trimPostText(string $text): string

@@ -5,11 +5,10 @@
 $types = ['telegram' => 'Telegram', 'listmonk' => 'Listmonk', 'matrix' => 'Matrix', 'webhook' => 'Generic Webhook', 'bluesky' => 'Bluesky', 'mastodon' => 'Mastodon'];
 ?>
 <div class="card mb-4">
-    <div class="card-header"><strong><?= t('Add / Update Channel') ?></strong></div>
+    <div class="card-header"><strong><?= t('Add Channel') ?></strong></div>
     <div class="card-body">
         <form method="post" action="<?= $view->action('save_channel') ?>">
             <?= $token->output('save_social_channel') ?>
-            <input type="hidden" name="id" id="sms-id" value="">
             <div class="row">
                 <div class="col-md-4 mb-3">
                     <label class="form-label"><?= t('Channel Type') ?></label>

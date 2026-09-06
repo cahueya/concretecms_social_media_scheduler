@@ -5,10 +5,6 @@ defined('C5_EXECUTE') or die('Access Denied.');
 
 class WebhookSender implements ChannelSenderInterface
 {
-    public function supports(string $type): bool
-    {
-        return $type === 'webhook';
-    }
 
     public function send(array $channel, string $subject, string $bodyHtml, array $attachments = []): string
     {
@@ -50,7 +46,7 @@ class WebhookSender implements ChannelSenderInterface
         $headers = $this->normalizeHeaders((array) ($config['headers'] ?? []));
         $headers = $this->applyAuthenticationHeaders($headers, $config);
 
-        [$body, $headers, $isMultipart] = $this->prepareRequestBody($payload, $attachments, $payloadMode, $attachmentMode, $headers);
+        [$body, $headers] = $this->prepareRequestBody($payload, $attachments, $payloadMode, $attachmentMode, $headers);
 
         $ch = curl_init($url);
         $options = [
@@ -144,7 +140,7 @@ class WebhookSender implements ChannelSenderInterface
     {
         if ($payloadMode === 'json') {
             $headers[] = 'Content-Type: application/json';
-            return [json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $headers, false];
+            return [json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $headers];
         }
 
         if ($payloadMode === 'multipart' || $attachmentMode === 'multipart') {
@@ -157,11 +153,11 @@ class WebhookSender implements ChannelSenderInterface
                     $i++;
                 }
             }
-            return [$fields, $headers, true];
+            return [$fields, $headers];
         }
 
         $headers[] = 'Content-Type: application/x-www-form-urlencoded';
-        return [http_build_query(['payload' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]), $headers, false];
+        return [http_build_query(['payload' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]), $headers];
     }
 
     public function normalizeHeaders(array $headers): array

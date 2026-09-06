@@ -2,22 +2,17 @@
 namespace Concrete\Package\SocialMediaScheduler\Src\Scheduler;
 
 use Concrete\Package\SocialMediaScheduler\Src\Post\Repository;
-use Concrete\Package\SocialMediaScheduler\Src\Service\Channel\ListmonkSender;
-use Concrete\Package\SocialMediaScheduler\Src\Service\Channel\MatrixSender;
-use Concrete\Package\SocialMediaScheduler\Src\Service\Channel\TelegramSender;
-use Concrete\Package\SocialMediaScheduler\Src\Service\Channel\WebhookSender;
-use Concrete\Package\SocialMediaScheduler\Src\Service\Channel\BlueskySender;
-use Concrete\Package\SocialMediaScheduler\Src\Service\Channel\MastodonSender;
+use Concrete\Package\SocialMediaScheduler\Src\Service\Channel\SenderRegistry;
 
 defined('C5_EXECUTE') or die('Access Denied.');
 
 class PostingRunner
 {
-    private array $senders;
+    private SenderRegistry $senders;
 
-    public function __construct(private Repository $repository)
+    public function __construct(private Repository $repository, ?SenderRegistry $senders = null)
     {
-        $this->senders = [new TelegramSender(), new ListmonkSender(), new MatrixSender(), new WebhookSender(), new BlueskySender(), new MastodonSender()];
+        $this->senders = $senders ?? new SenderRegistry();
     }
 
     public function runDue(): array
@@ -42,15 +37,12 @@ class PostingRunner
 
     public function runPostingNow(int $postingID): array
     {
-        $posting = $this->repository->getPosting($postingID, true);
+        $posting = $this->repository->getPostingForSending($postingID, true);
         if (!$posting) {
             throw new \RuntimeException('Posting not found.');
         }
-        $summary = ['postings' => 1, 'sent' => 0, 'failed' => 0, 'retries' => 0];
         $result = $this->sendPosting($posting, 1, 'manual_');
-        $summary['sent'] = $result['sent'];
-        $summary['failed'] = $result['failed'];
-        return $summary;
+        return ['postings' => 1, 'sent' => $result['sent'], 'failed' => $result['failed'], 'retries' => 0];
     }
 
     public function sendPosting(array $posting, int $attempt, string $statusPrefix): array
@@ -59,8 +51,12 @@ class PostingRunner
         foreach ($posting['channels'] as $channel) {
             $channel['_posting_title'] = (string) ($posting['title'] ?? '');
             try {
-                $sender = $this->getSender((string) $channel['channelType']);
-                $message = $sender->send($channel, (string) $posting['subject'], (string) $posting['bodyHtml'], (array) ($posting['attachments'] ?? []));
+                $message = $this->senders->get((string) $channel['channelType'])->send(
+                    $channel,
+                    (string) $posting['subject'],
+                    (string) $posting['bodyHtml'],
+                    (array) ($posting['attachments'] ?? [])
+                );
                 $this->repository->log((int) $posting['id'], (int) $channel['id'], $statusPrefix . 'success', $message, $attempt);
                 $result['sent']++;
             } catch (\Throwable $e) {
@@ -69,13 +65,5 @@ class PostingRunner
             }
         }
         return $result;
-    }
-
-    public function getSender(string $type)
-    {
-        foreach ($this->senders as $sender) {
-            if ($sender->supports($type)) return $sender;
-        }
-        throw new \RuntimeException('Unsupported channel type: ' . $type);
     }
 }

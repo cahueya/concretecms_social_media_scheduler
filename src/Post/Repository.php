@@ -8,6 +8,7 @@ use Concrete\Package\SocialMediaScheduler\Src\Entity\Channel;
 use Concrete\Package\SocialMediaScheduler\Src\Entity\Posting;
 use Concrete\Package\SocialMediaScheduler\Src\Entity\PostingChannel;
 use Concrete\Package\SocialMediaScheduler\Src\Entity\SendLog;
+use Concrete\Package\SocialMediaScheduler\Src\Service\Channel\TextNormalizer;
 use Concrete\Package\SocialMediaScheduler\Src\Util\Crypto;
 use DateTimeImmutable;
 use DateTimeInterface;
@@ -19,6 +20,7 @@ use Doctrine\ORM\EntityManagerInterface;
 class Repository
 {
     private EntityManagerInterface $em;
+    private array $attachmentCache = [];
 
     public function __construct(private Connection $db, private Crypto $crypto, ?EntityManagerInterface $em = null)
     {
@@ -42,27 +44,19 @@ class Repository
         return $channel instanceof Channel ? $this->hydrateChannel($this->channelToRow($channel)) : null;
     }
 
-    public function saveChannel(string $type, string $name, array $config, bool $enabled = true, ?int $id = null): int
+    public function saveChannel(string $type, string $name, array $config, bool $enabled = true): int
     {
         $now = $this->newDateTime();
-        $channel = $id ? $this->em->find(Channel::class, $id) : null;
-        if (!$channel instanceof Channel) {
-            $channel = new Channel();
-            $channel->setDateCreated($now);
-            $this->em->persist($channel);
-        } elseif (!empty($this->hydrateChannel($this->channelToRow($channel))['config'])) {
-            $existing = $this->hydrateChannel($this->channelToRow($channel));
-            $config = $this->mergeSecretConfig((string) $type, $existing['config'], $config);
-        }
-
-        $channel
+        $channel = (new Channel())
             ->setChannelType($type)
             ->setChannelName($name)
             ->setIsEnabled($enabled)
             ->setConfigJson($this->crypto->encryptArray($config))
             ->setPublicEndpointUrl($this->extractPublicEndpointUrl($type, $config))
+            ->setDateCreated($now)
             ->setDateUpdated($now);
 
+        $this->em->persist($channel);
         $this->em->flush();
         return (int) $channel->getId();
     }
@@ -98,7 +92,8 @@ class Repository
         $attachmentFileIDs = array_values(array_filter(array_unique(array_map('intval', $attachmentFileIDs))));
 
         $posting = $id ? $this->em->find(Posting::class, $id) : null;
-        if (!$posting instanceof Posting) {
+        $isNew = !$posting instanceof Posting;
+        if ($isNew) {
             $posting = new Posting();
             $posting->setDateCreated($now);
             $posting->setIsEnabled(true);
@@ -111,7 +106,6 @@ class Repository
             ->setBodyHtml(LinkAbstractor::translateTo($bodyHtml))
             ->setStartAt($startAtServer)
             ->setEndAt($endAtServer)
-            ->setNextRunAt($startAtServer)
             ->setRepeatEveryDays(max(0, $repeatDays))
             ->setTimezone($timezone)
             ->setAttachmentFileIDs(json_encode($attachmentFileIDs))
@@ -119,8 +113,12 @@ class Repository
             ->setRetryDelayMinutes(max(1, $retryDelayMinutes))
             ->setDateUpdated($now);
 
-        if (!$id) {
-            $posting->setRetryCount(0);
+        if ($isNew) {
+            $posting->setNextRunAt($startAtServer)->setRetryCount(0);
+        } elseif ($posting->getLastRunAt() === null && $posting->getRetryCount() === 0) {
+            // Before the first scheduled run, changing the start time should also move the first run.
+            // Once a posting has run or entered retry handling, normal edits must preserve scheduler state.
+            $posting->setNextRunAt($startAtServer);
         }
 
         $this->em->flush();
@@ -149,16 +147,26 @@ class Repository
         }
     }
 
-    public function getPostings(): array
+    public function getPostingsForDashboard(): array
     {
         $postings = $this->em->getRepository(Posting::class)->findBy([], ['nextRunAt' => 'ASC', 'id' => 'DESC']);
-        return array_map(fn (Posting $posting) => $this->hydratePosting($this->postingToRow($posting), false), $postings);
+        $rows = array_map(fn (Posting $posting) => $this->postingToRow($posting), $postings);
+        return $this->hydratePostingRows($rows, false, true);
     }
 
-    public function getPosting(int $id, bool $enabledChannelsOnly = false): ?array
+    public function getPostingForSending(int $id, bool $enabledChannelsOnly = false): ?array
     {
         $posting = $this->em->find(Posting::class, $id);
-        return $posting instanceof Posting ? $this->hydratePosting($this->postingToRow($posting), $enabledChannelsOnly) : null;
+        return $posting instanceof Posting
+            ? $this->hydratePostingForSending($this->postingToRow($posting), $enabledChannelsOnly)
+            : null;
+    }
+
+    public function getPostingChoices(): array
+    {
+        return $this->db->fetchAllAssociative(
+            "SELECT id, title, subject FROM SocialMediaSchedulerPostings ORDER BY COALESCE(NULLIF(title, ''), subject) ASC, id DESC"
+        );
     }
 
     public function getDuePostings(): array
@@ -175,7 +183,8 @@ class Repository
             ->getQuery()
             ->getResult();
 
-        return array_map(fn (Posting $posting) => $this->hydratePosting($this->postingToRow($posting), true), $postings);
+        $rows = array_map(fn (Posting $posting) => $this->postingToRow($posting), $postings);
+        return $this->hydratePostingRows($rows, true, false);
     }
 
     public function markPostingRun(int $postingID, int $repeatDays): void
@@ -263,7 +272,7 @@ class Repository
     {
         $subject = (string) ($posting['subject'] ?? '');
         $bodyHtml = (string) ($posting['bodyHtml'] ?? '');
-        $plainBody = trim(strip_tags(str_replace(['<br>', '<br/>', '<br />'], "\n", $bodyHtml)));
+        $plainBody = TextNormalizer::htmlToText($bodyHtml);
         $config = $channel['config'] ?? [];
         $type = (string) ($channel['channelType'] ?? '');
         $label = (string) ($channel['channelName'] ?? $type);
@@ -318,17 +327,45 @@ class Repository
         return $row;
     }
 
-    public function hydratePosting(array $row, bool $enabledChannelsOnly): array
+    private function hydratePostingRows(array $rows, bool $enabledChannelsOnly, bool $withPreviews): array
+    {
+        if (!$rows) {
+            return [];
+        }
+
+        $channelMap = $this->getChannelsForPostings(
+            array_map(static fn (array $row): int => (int) $row['id'], $rows),
+            $enabledChannelsOnly
+        );
+
+        foreach ($rows as &$row) {
+            $row = $this->hydratePostingBase($row);
+            $row['channels'] = $channelMap[(int) $row['id']] ?? [];
+            if ($withPreviews) {
+                $row['previews'] = array_map(
+                    fn (array $channel) => $this->buildChannelPreview($row, $channel),
+                    $row['channels']
+                );
+            }
+        }
+        unset($row);
+
+        return $rows;
+    }
+
+    private function hydratePostingForSending(array $row, bool $enabledChannelsOnly): array
+    {
+        $row = $this->hydratePostingBase($row);
+        $row['channels'] = $this->getChannelsForPosting((int) $row['id'], $enabledChannelsOnly);
+        return $row;
+    }
+
+    private function hydratePostingBase(array $row): array
     {
         $row['title'] = trim((string) ($row['title'] ?? '')) !== '' ? (string) $row['title'] : (string) ($row['subject'] ?? '');
         $row['bodyHtml'] = LinkAbstractor::translateFrom((string) ($row['bodyHtml'] ?? ''));
-        $row['channels'] = $this->getChannelsForPosting((int) $row['id'], $enabledChannelsOnly);
         $row['attachmentFileIDsArray'] = $this->decodeAttachmentIDs($row['attachmentFileIDs'] ?? null);
         $row['attachments'] = $this->getAttachments($row['attachmentFileIDsArray']);
-        $row['previews'] = [];
-        foreach ($row['channels'] as $channel) {
-            $row['previews'][] = $this->buildChannelPreview($row, $channel);
-        }
         return $row;
     }
 
@@ -344,25 +381,39 @@ class Repository
         $this->em->flush();
     }
 
-    public function getChannelsForPosting(int $postingID, bool $enabledOnly = false): array
+    private function getChannelsForPosting(int $postingID, bool $enabledOnly = false): array
     {
-        $links = $this->em->getRepository(PostingChannel::class)->findBy(['postingID' => $postingID]);
-        $rows = [];
-        foreach ($links as $link) {
-            if (!$link instanceof PostingChannel) {
-                continue;
-            }
-            $channel = $this->em->find(Channel::class, $link->getChannelID());
-            if (!$channel instanceof Channel) {
-                continue;
-            }
-            if ($enabledOnly && !$channel->isEnabled()) {
-                continue;
-            }
-            $rows[] = $this->hydrateChannel($this->channelToRow($channel));
+        return $this->getChannelsForPostings([$postingID], $enabledOnly)[$postingID] ?? [];
+    }
+
+    private function getChannelsForPostings(array $postingIDs, bool $enabledOnly = false): array
+    {
+        $postingIDs = array_values(array_filter(array_unique(array_map('intval', $postingIDs))));
+        if (!$postingIDs) {
+            return [];
         }
-        usort($rows, static fn (array $a, array $b) => [$a['channelType'], $a['channelName']] <=> [$b['channelType'], $b['channelName']]);
-        return $rows;
+
+        $placeholders = implode(', ', array_fill(0, count($postingIDs), '?'));
+        $sql = 'SELECT pc.postingID AS postingID, c.* FROM SocialMediaSchedulerChannels c '
+            . 'INNER JOIN SocialMediaSchedulerPostingChannels pc ON pc.channelID = c.id '
+            . 'WHERE pc.postingID IN (' . $placeholders . ')';
+        $params = $postingIDs;
+        if ($enabledOnly) {
+            $sql .= ' AND c.isEnabled = ?';
+            $params[] = 1;
+        }
+        $sql .= ' ORDER BY pc.postingID ASC, c.channelType ASC, c.channelName ASC';
+
+        $channels = [];
+        $hydrated = [];
+        foreach ($this->db->fetchAllAssociative($sql, $params) as $row) {
+            $postingID = (int) $row['postingID'];
+            $channelID = (int) $row['id'];
+            unset($row['postingID']);
+            $hydrated[$channelID] ??= $this->hydrateChannel($row);
+            $channels[$postingID][] = $hydrated[$channelID];
+        }
+        return $channels;
     }
 
     public function decodeAttachmentIDs(?string $value): array
@@ -378,8 +429,16 @@ class Repository
     {
         $attachments = [];
         foreach ($fileIDs as $fileID) {
+            $fileID = (int) $fileID;
+            if ($fileID <= 0) {
+                continue;
+            }
+            if (isset($this->attachmentCache[$fileID])) {
+                $attachments[] = $this->attachmentCache[$fileID];
+                continue;
+            }
             try {
-                $file = File::getByID((int) $fileID);
+                $file = File::getByID($fileID);
                 if (!is_object($file) || $file->isError()) continue;
                 $version = $file->getApprovedVersion();
                 if (!is_object($version)) continue;
@@ -390,7 +449,9 @@ class Repository
                 }
                 $mimeType = $this->resolveFileVersionMimeType($version, $path);
                 $size = $path && is_readable($path) ? (int) filesize($path) : 0;
-                $attachments[] = ['id' => (int) $fileID, 'title' => method_exists($version, 'getTitle') ? $version->getTitle() : '', 'filename' => method_exists($version, 'getFilename') ? $version->getFilename() : ($path ? basename($path) : ''), 'url' => $url, 'path' => $path, 'mimeType' => $mimeType, 'size' => $size];
+                $attachment = ['id' => $fileID, 'title' => method_exists($version, 'getTitle') ? $version->getTitle() : '', 'filename' => method_exists($version, 'getFilename') ? $version->getFilename() : ($path ? basename($path) : ''), 'url' => $url, 'path' => $path, 'mimeType' => $mimeType, 'size' => $size];
+                $this->attachmentCache[$fileID] = $attachment;
+                $attachments[] = $attachment;
             } catch (\Throwable) {}
         }
         return $attachments;
@@ -458,11 +519,6 @@ class Repository
         return 'application/octet-stream';
     }
 
-    public function convertToServerTime(string $value, string $timezone): string
-    {
-        return $this->convertToServerDateTime($value, $timezone)->format('Y-m-d H:i:s');
-    }
-
     public function convertToServerDateTime(string $value, string $timezone): DateTimeImmutable
     {
         $value = str_replace('T', ' ', trim($value));
@@ -482,31 +538,6 @@ class Repository
         } catch (\Throwable) {
             return date_default_timezone_get();
         }
-    }
-
-    public function mergeSecretConfig(string $type, array $old, array $new): array
-    {
-        $secretKeys = match ($type) {
-            'telegram' => ['bot_token'],
-            'listmonk' => ['password'],
-            'matrix' => ['access_token'],
-            'webhook' => ['auth_token', 'basic_username', 'basic_password'],
-            'bluesky' => ['app_password'],
-            'mastodon' => ['access_token'],
-            'x', 'twitter' => ['api_secret', 'access_token', 'access_token_secret'],
-            default => [],
-        };
-        foreach ($secretKeys as $key) {
-            if (($new[$key] ?? '') === '' && ($old[$key] ?? '') !== '') {
-                $new[$key] = $old[$key];
-            }
-        }
-        return $new;
-    }
-
-    public function now(): string
-    {
-        return date('Y-m-d H:i:s');
     }
 
     public function newDateTime(string $value = 'now'): DateTimeImmutable

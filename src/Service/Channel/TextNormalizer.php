@@ -18,9 +18,4 @@ class TextNormalizer
         $text = preg_replace('/\n{3,}/', "\n\n", (string) $text);
         return trim((string) $text);
     }
-
-    public static function escapeHtml(?string $value): string
-    {
-        return htmlspecialchars(self::decode($value), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8', false);
-    }
 }

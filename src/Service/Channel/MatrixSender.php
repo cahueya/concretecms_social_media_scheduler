@@ -1,12 +1,10 @@
 <?php
-// 0.5.8 proof: Matrix sends editor/body media as media events and ignores explicit attachments by default.
 namespace Concrete\Package\SocialMediaScheduler\Src\Service\Channel;
 
 defined('C5_EXECUTE') or die('Access Denied.');
 
 class MatrixSender implements ChannelSenderInterface
 {
-    public function supports(string $type): bool { return $type === 'matrix'; }
 
     public function send(array $channel, string $subject, string $bodyHtml, array $attachments = []): string
     {

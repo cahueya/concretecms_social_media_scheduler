@@ -1,12 +1,10 @@
 <?php
-// 0.4.6 proof: editor images remain in body; explicit attachments only in campaign media, not rendered into body.
 namespace Concrete\Package\SocialMediaScheduler\Src\Service\Channel;
 
 defined('C5_EXECUTE') or die('Access Denied.');
 
 class ListmonkSender implements ChannelSenderInterface
 {
-    public function supports(string $type): bool { return $type === 'listmonk'; }
 
     public function send(array $channel, string $subject, string $bodyHtml, array $attachments = []): string
     {
@@ -160,39 +158,6 @@ class ListmonkSender implements ChannelSenderInterface
         return $map;
     }
 
-    public function uploadedMediaHtml(array $uploadedMedia, array $originalAttachments): string
-    {
-        if (empty($uploadedMedia)) {
-            return $this->attachmentLinksHtml($originalAttachments);
-        }
-
-        $html = '';
-        $links = [];
-        foreach ($uploadedMedia as $media) {
-            $attachment = (array) ($media['_original'] ?? []);
-            if (($attachment['source'] ?? '') === 'editor') {
-                continue; // Already replaced in the editor HTML.
-            }
-            $label = htmlspecialchars((string) (($attachment['title'] ?? '') ?: ($attachment['filename'] ?? 'Attachment')), ENT_QUOTES, 'UTF-8');
-            $url = (string) ($media['_url'] ?? '');
-            $mime = (string) ($attachment['mimeType'] ?? '');
-            if ($url !== '' && str_starts_with($mime, 'image/')) {
-                $html .= '<p><img src="' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '" alt="' . $label . '" style="max-width:100%;height:auto;"></p>';
-            } elseif ($url !== '') {
-                $links[] = '<li><a href="' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '">' . $label . '</a></li>';
-            } else {
-                $links[] = '<li>' . $label . '</li>';
-            }
-        }
-        if ($html !== '' || $links) {
-            $html = '<hr><p><strong>Attachments</strong></p>' . $html;
-        }
-        if ($links) {
-            $html .= '<ul>' . implode('', $links) . '</ul>';
-        }
-        return $html;
-    }
-
     public function extractMediaUrl(array $media, string $baseUrl = ''): string
     {
         foreach (['url', 'full_url', 'public_url', 'uri', 'path'] as $key) {
@@ -214,19 +179,6 @@ class ListmonkSender implements ChannelSenderInterface
             $url = substr($url, 0, -4);
         }
         return $url;
-    }
-
-    public function attachmentLinksHtml(array $attachments): string
-    {
-        if (empty($attachments)) return '';
-        $html = '<hr><p><strong>Attachments</strong></p><ul>';
-        foreach ($attachments as $attachment) {
-            $url = htmlspecialchars((string) ($attachment['url'] ?? ''), ENT_QUOTES, 'UTF-8');
-            if ($url === '') continue;
-            $label = htmlspecialchars((string) (($attachment['title'] ?? '') ?: ($attachment['filename'] ?? $url)), ENT_QUOTES, 'UTF-8');
-            $html .= '<li><a href="' . $url . '">' . $label . '</a></li>';
-        }
-        return $html . '</ul>';
     }
 
     public function request(string $method, string $url, string $username, string $password, array $payload): array

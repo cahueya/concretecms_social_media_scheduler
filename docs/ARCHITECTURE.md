@@ -1,32 +1,28 @@
 # Social Media Scheduler Architecture
 
-Version: **0.6.4**
+Version: **0.6.6**
 
-This document describes the internal architecture of the Social Media Scheduler package for ConcreteCMS 9.4+.
-
-## 1. Package purpose
-
-The package manages scheduled postings and sends them to configured channels through a ConcreteCMS automated task.
-
-The core workflow is:
+## Overview
 
 ```text
 Dashboard
   ↓
-Postings and Channels stored in package tables
+Repository / Doctrine entities
   ↓
-ConcreteCMS task submit_social_postings
+ConcreteCMS task: submit_social_postings
   ↓
 PostingRunner
   ↓
-Channel sender classes
+SenderRegistry
   ↓
-External APIs
+Channel sender
+  ↓
+External API
 ```
 
-## 2. Dashboard pages
+## Dashboard
 
-The dashboard structure is:
+The package installs:
 
 ```text
 /dashboard/social_media_scheduler
@@ -38,54 +34,41 @@ The dashboard structure is:
 
 The parent page redirects to `/dashboard/social_media_scheduler/posts`.
 
-The pages are:
+Create and edit use the same posting-form partial and the same parsing/validation logic in `src/Dashboard/PostingController.php`.
 
-| Page | Purpose |
-|---|---|
-| Posts | List, view, enable/disable, edit, send now and delete postings. |
-| Create | Create new scheduled postings. |
-| Logs | View and clear send logs. |
-| Configuration | Configure channel credentials and channel-specific options. |
-
-Legacy pages from early pre-release builds are removed and are not installed in 0.6.x.
-
-## 3. Persistence layer
-
-Version 0.6.x introduces Doctrine ORM entities for package-owned data.
-
-Entities:
+## Persistence
 
 | Entity | Table |
 |---|---|
-| `src/Entity/Posting.php` | `SocialMediaSchedulerPostings` |
-| `src/Entity/Channel.php` | `SocialMediaSchedulerChannels` |
-| `src/Entity/PostingChannel.php` | `SocialMediaSchedulerPostingChannels` |
-| `src/Entity/SendLog.php` | `SocialMediaSchedulerLog` |
+| `Posting` | `SocialMediaSchedulerPostings` |
+| `Channel` | `SocialMediaSchedulerChannels` |
+| `PostingChannel` | `SocialMediaSchedulerPostingChannels` |
+| `SendLog` | `SocialMediaSchedulerLog` |
 
-The repository layer keeps compatibility with the existing controller and sender flow by returning the same array-like structures used by the pre-ORM versions.
+`src/Post/Repository.php` is the package persistence boundary. It returns arrays to the dashboard and sender layers so channel implementations do not depend directly on Doctrine entities.
 
-This means the sender classes and API integrations remain stable while the storage implementation is modernized internally.
+### Purpose-specific hydration
 
-## 4. Installer
+Repository reads are intentionally split by use case:
 
-Package setup is orchestrated by:
+- **Posts dashboard:** posting data, selected channels, attachment metadata and channel previews.
+- **Scheduled/manual sending:** posting data, enabled selected channels and attachment metadata, but no previews.
+- **Logs filter:** ID/title/subject only.
 
-```text
-src/Package/Installer.php
-```
+For posting lists, channels are loaded in bulk rather than loading each posting/channel combination individually.
 
-The installer is responsible for:
+## Installer
 
-- installing dashboard pages
-- registering required page paths
-- installing task metadata through the package lifecycle
-- ensuring package schema setup
-- removing obsolete dashboard pages if necessary
-- uninstall cleanup
+`src/Package/Installer.php` handles:
 
-The package controller delegates install, upgrade and uninstall work to this installer instead of keeping all setup logic in the controller.
+- dashboard Single Pages;
+- task metadata installation;
+- dashboard child-page order;
+- package-table removal on uninstall.
 
-## 5. Automated task
+Entity schema management is left to the normal ConcreteCMS package/Doctrine lifecycle. The package no longer maintains a second manual SchemaTool/column-repair path.
+
+## Task flow
 
 Task handle:
 
@@ -102,26 +85,30 @@ src/Post/Command/SubmitDuePostingsCommandHandler.php
 src/Scheduler/PostingRunner.php
 ```
 
-Task flow:
+Flow:
 
-1. The task command is executed manually or by cron.
-2. The command handler invokes the scheduler/runner.
-3. The repository finds due postings.
-4. The runner resolves enabled channels for each posting.
-5. Each channel sender attempts delivery.
-6. Each attempt is logged.
-7. Failures are retried according to retry settings.
-8. Successful recurring postings are advanced to the next due date.
+1. Repository selects enabled due postings that have not passed `endAt`.
+2. Repository resolves only enabled channels selected for those postings.
+3. `PostingRunner` resolves each sender through `SenderRegistry`.
+4. Each send attempt is logged.
+5. Failed scheduled runs are retried until `maxAttempts` is reached, subject to `endAt`.
+6. Completed recurring postings advance by `repeatEveryDays`; one-time/completed postings are disabled.
 
-## 6. Channel sender architecture
+## Sender architecture
 
-Every sender implements the common sender interface:
+All active senders implement:
 
 ```text
 src/Service/Channel/ChannelSenderInterface.php
 ```
 
-Current active senders:
+Active types are defined once in:
+
+```text
+src/Service/Channel/SenderRegistry.php
+```
+
+Active senders:
 
 ```text
 TelegramSender.php
@@ -132,80 +119,29 @@ BlueskySender.php
 MastodonSender.php
 ```
 
-`XSender.php` may exist in the codebase, but X/Twitter is not exposed as a selectable channel in 0.6.4 because the connector has not been fully verified with paid X API write access.
+`XSender.php` is retained as dormant future connector code. It is not present in `SenderRegistry`, not accepted by the configuration controller and not exposed in the dashboard.
 
-The runner maps the selected channel type to a sender and passes:
+## Text normalization
 
-- posting data
-- channel configuration
-- resolved media information
+`TextNormalizer.php` provides the shared HTML-to-text and entity-decoding behavior used by text-oriented channels. Bluesky and Mastodon no longer keep private duplicate HTML-to-text implementations.
 
-The senders are responsible for channel-specific API formatting and delivery.
+## Media handling
 
-## 7. Media architecture
+`LocalMediaHelper.php` handles editor image discovery and local media resolution. Body media and explicit attachments remain separate by design.
 
-The package separates media into two groups.
+Sender-specific policies remain in the individual sender classes because upload APIs and limitations differ materially between platforms.
 
-### 7.1 Body media
+## Credential storage
 
-Body media are images inserted into the ConcreteCMS rich-text editor.
+`Crypto.php` encrypts new channel configurations with AES-256-CBC. Saving new credentials requires OpenSSL. Legacy Base64 values remain readable for compatibility but are no longer written.
 
-They are part of the message content and are used by social/messenger channels as post media.
+## Logging
 
-### 7.2 Explicit attachments
+Each channel attempt creates a `SendLog` entry containing posting/channel IDs, result status, message, attempt count and timestamp. Manual sends use `manual_success` / `manual_error`; scheduled sends use `success` / `error`.
 
-Explicit attachments are files selected through the ConcreteCMS File Manager attachment selector.
+## Uninstall
 
-They are primarily used for Listmonk/email-style attachments.
-
-Social and messenger channels ignore explicit attachments by default unless the channel option to include them is enabled.
-
-### 7.3 Local media resolving
-
-`LocalMediaHelper.php` resolves ConcreteCMS file references and editor image URLs into usable media metadata:
-
-- filename
-- public URL
-- local path if available
-- MIME type
-- file size
-
-If a sender needs binary upload, it uses the local path when available. If not available, the sender may fall back to a URL or log a failure depending on channel requirements.
-
-## 8. Channel behavior summary
-
-| Channel | Text behavior | Media behavior |
-|---|---|---|
-| Listmonk | Subject becomes email subject, body remains HTML. | Body images are uploaded and embedded inline; explicit attachments are campaign media/attachments. |
-| Telegram | Subject and body become message text/caption. | Body images are uploaded via Bot API media methods. |
-| Matrix | Text message is sent first. | Body images are uploaded to Matrix media repository and sent as media events. |
-| Webhook | Structured payload is sent. | Body media and attachments are included as structured data or multipart, depending on mode. |
-| Bluesky | Subject and body become post text. | Body images are uploaded as blobs and embedded, max. 4. |
-| Mastodon | Subject and body become status text. | Body images are uploaded as media and attached to the status. |
-
-## 9. Logging
-
-Each send attempt creates a row in:
-
-```text
-SocialMediaSchedulerLog
-```
-
-The log page allows filtering and clearing logs.
-
-Typical log data includes:
-
-- posting ID
-- channel ID
-- channel type
-- status
-- message/error
-- attempt count
-- timestamp
-
-## 10. Uninstall
-
-Uninstall removes the package-owned tables:
+Uninstall removes:
 
 ```text
 SocialMediaSchedulerPostingChannels
@@ -213,21 +149,3 @@ SocialMediaSchedulerLog
 SocialMediaSchedulerChannels
 SocialMediaSchedulerPostings
 ```
-
-This is intentional for a clean release package. Users should back up data before uninstalling.
-
-## Text normalization
-
-Rich text editor content can contain HTML entities such as `&amp;uuml;` or `&amp;auml;`. Social and messenger APIs generally expect UTF-8 text, not browser-rendered HTML entities.
-
-Version 0.6.4 therefore normalizes text before channel submission:
-
-- Subjects are decoded to UTF-8 for all sender-facing text payloads.
-- Telegram plain mode sends decoded UTF-8 text.
-- Telegram HTML mode decodes first, then escapes only Telegram-relevant HTML control characters.
-- Matrix `body` is decoded plain text; `formatted_body` is decoded HTML.
-- Bluesky and Mastodon status text is decoded UTF-8.
-- Webhook `content_text` is decoded UTF-8.
-- Listmonk keeps the HTML body intact for e-mail rendering, but decodes the campaign subject.
-
-This prevents output such as `f&amp;uuml;r` from appearing in Telegram or other text channels.

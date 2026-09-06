@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.6.6
+
+- Fix scheduled postings becoming immediately due again after editing and saving.
+- Preserve `nextRunAt` for postings that have already completed a scheduled run.
+- Preserve an active retry schedule when a posting is edited after a failed attempt.
+- Continue updating `nextRunAt` from `startAt` for new postings and existing postings that have not yet run or entered retry handling.
+- Keep `lastRunAt` and `retryCount` unchanged during normal posting edits.
+
+## 0.6.5
+
+- Cleanup release with no intended schema or posting-behavior changes.
+- Keep dormant X/Twitter sender code for possible future reactivation while leaving X unregistered and unavailable in the UI.
+- Split repository reads by purpose so the logs filter no longer hydrates channels, files or previews.
+- Stop building channel previews for scheduled and manual sends.
+- Bulk-load posting channels for dashboard and due-posting lists instead of resolving each channel individually.
+- Centralize active sender mapping in `SenderRegistry` and remove redundant `supports()` methods.
+- Share posting form parsing/validation between Create and Posts controllers.
+- Share create/edit posting markup in one form partial.
+- Remove legacy attachment POST fields that are no longer emitted by the UI.
+- Remove unused helper methods and duplicate Bluesky/Mastodon/X HTML-to-text implementations.
+- Simplify Webhook request-body return values.
+- Remove the obsolete manual ORM SchemaTool/endAt repair layer and rely on the ConcreteCMS package/Doctrine lifecycle.
+- Remove unused channel-update/secret-merge code because the current dashboard only supports add/delete.
+- Require OpenSSL when writing new encrypted channel configuration while retaining legacy Base64 reads.
+- Remove redundant redirect JavaScript from the dashboard parent page.
+- Remove per-version release-note files and update README/architecture/channel documentation to the current code.
+- Normalize package icon to 97×97 PNG without transparency.
+
 ## 0.6.4
 
 - Normalize HTML entities before text-oriented channel sending.

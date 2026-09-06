@@ -1,0 +1,36 @@
+{
+    "name": "cahueya/concretecms_social_media_scheduler",
+    "description": "A ConcreteCMS package for scheduled and recurring publishing to multiple communication and social-media channels.",
+    "type": "concrete5-package",
+    "keywords": [
+        "concretecms",
+        "concrete",
+        "cms",
+        "concrete5",
+        "package",
+        "addon",
+        "socialmedia",
+        "scheduler"
+    ],
+    "homepage": "https://github.com/cahueya/concretecms_social_media_scheduler",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Cahueya",
+            "email": "info@cahueya.com",
+            "role": "maintainer"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/cahueya/concretecms_social_media_scheduler/issues",
+        "source": "https://github.com/cahueya/concretecms_social_media_scheduler"
+    },
+    "require": {
+        "php": ">=8.1",
+        "concrete5/core": "^9"
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "sort-packages": true
+    }
+}

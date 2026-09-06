@@ -5,10 +5,6 @@ defined('C5_EXECUTE') or die('Access Denied.');
 
 class MastodonSender implements ChannelSenderInterface
 {
-    public function supports(string $type): bool
-    {
-        return $type === 'mastodon';
-    }
 
     public function send(array $channel, string $subject, string $bodyHtml, array $attachments = []): string
     {
@@ -25,7 +21,7 @@ class MastodonSender implements ChannelSenderInterface
         $cleanBodyHtml = $helper->removeAllImageTags($bodyHtml);
 
         $subjectText = TextNormalizer::decode($subject);
-        $plain = $this->htmlToText($cleanBodyHtml);
+        $plain = TextNormalizer::htmlToText($cleanBodyHtml);
         $status = trim($subjectText . "\n\n" . $plain);
         if ($status === '') {
             $status = $subjectText !== '' ? $subjectText : 'Post';
@@ -210,15 +206,6 @@ class MastodonSender implements ChannelSenderInterface
     public function normalizeVisibility(string $visibility): string
     {
         return in_array($visibility, ['public', 'unlisted', 'private', 'direct'], true) ? $visibility : 'public';
-    }
-
-    public function htmlToText(string $html): string
-    {
-        $text = str_ireplace(['<br>', '<br/>', '<br />', '</p>', '</div>', '</li>'], "\n", $html);
-        $text = TextNormalizer::decode(strip_tags($text));
-        $text = preg_replace('/[ \t]+/', ' ', (string) $text);
-        $text = preg_replace('/\n{3,}/', "\n\n", (string) $text);
-        return trim((string) $text);
     }
 
     public function trimStatus(string $text): string

@@ -14,7 +14,7 @@ class Controller extends Package implements ProviderAggregateInterface
 {
     protected $pkgHandle = 'social_media_scheduler';
     protected $appVersionRequired = '9.4.0';
-    protected $pkgVersion = '0.6.4';
+    protected $pkgVersion = '0.6.6';
     protected $pkgAutoloaderRegistries = [
         'src' => 'Concrete\\Package\\SocialMediaScheduler\\Src',
     ];
@@ -59,7 +59,7 @@ class Controller extends Package implements ProviderAggregateInterface
 
     public function uninstall()
     {
-        $this->installer()->uninstall($this);
+        $this->installer()->uninstall();
         parent::uninstall();
     }
 

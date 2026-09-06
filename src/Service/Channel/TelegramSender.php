@@ -5,7 +5,6 @@ defined('C5_EXECUTE') or die('Access Denied.');
 
 class TelegramSender implements ChannelSenderInterface
 {
-    public function supports(string $type): bool { return $type === 'telegram'; }
 
     public function send(array $channel, string $subject, string $bodyHtml, array $attachments = []): string
     {

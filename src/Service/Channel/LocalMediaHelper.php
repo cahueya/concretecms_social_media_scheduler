@@ -1,5 +1,4 @@
 <?php
-// 0.5.8 proof: helper separates editor/body media from explicit attachments for channel-specific delivery.
 namespace Concrete\Package\SocialMediaScheduler\Src\Service\Channel;
 
 defined('C5_EXECUTE') or die('Access Denied.');
@@ -178,10 +177,6 @@ class LocalMediaHelper
         return $this->dedupeAttachments($bodyMedia);
     }
 
-    public function countBodyImages(string $bodyHtml): int
-    {
-        return count($this->extractLocalImages($bodyHtml));
-    }
     public function isImage(array $attachment): bool
     {
         $mime = (string) ($attachment['mimeType'] ?? '');

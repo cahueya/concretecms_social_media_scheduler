@@ -4,15 +4,12 @@ namespace Concrete\Package\SocialMediaScheduler\Controller\SinglePage\Dashboard\
 use Concrete\Core\Database\Connection\Connection;
 use Concrete\Core\Page\Controller\DashboardPageController;
 use Concrete\Package\SocialMediaScheduler\Src\Post\Repository;
-use Concrete\Package\SocialMediaScheduler\Src\Service\Channel\TelegramSender;
-use Concrete\Package\SocialMediaScheduler\Src\Service\Channel\ListmonkSender;
-use Concrete\Package\SocialMediaScheduler\Src\Service\Channel\MatrixSender;
-use Concrete\Package\SocialMediaScheduler\Src\Service\Channel\WebhookSender;
 use Concrete\Package\SocialMediaScheduler\Src\Service\Channel\BlueskySender;
-use Concrete\Package\SocialMediaScheduler\Src\Service\Channel\MastodonSender;
+use Concrete\Package\SocialMediaScheduler\Src\Service\Channel\SenderRegistry;
+use Concrete\Package\SocialMediaScheduler\Src\Service\Channel\TelegramSender;
 use Concrete\Package\SocialMediaScheduler\Src\Util\Crypto;
 
-defined('C5_EXECUTE') or die('Access Denied.');
+\defined('C5_EXECUTE') or die('Access Denied.');
 
 class Config extends DashboardPageController
 {
@@ -33,19 +30,20 @@ class Config extends DashboardPageController
             $this->error->add($this->token->getErrorMessage());
             return $this->buildRedirect('/dashboard/social_media_scheduler/config');
         }
+
         $type = (string) $this->post('channelType');
-        $name = trim((string) $this->post('channelName'));
-        $id = (int) $this->post('id');
-        $enabled = (bool) $this->post('isEnabled');
-        if (!in_array($type, ['telegram', 'listmonk', 'matrix', 'webhook', 'bluesky', 'mastodon'], true)) {
+        if (!in_array($type, SenderRegistry::types(), true)) {
             $this->flash('error', t('Invalid channel type.'));
             return $this->buildRedirect('/dashboard/social_media_scheduler/config');
         }
-        if ($name === '') {
-            $name = ucfirst($type);
-        }
-        $config = $this->buildConfigFromPost($type);
-        $this->repository()->saveChannel($type, $name, $config, $enabled, $id ?: null);
+
+        $name = trim((string) $this->post('channelName')) ?: ucfirst($type);
+        $this->repository()->saveChannel(
+            $type,
+            $name,
+            $this->buildConfigFromPost($type),
+            (bool) $this->post('isEnabled')
+        );
         $this->flash('success', t('Channel saved.'));
         return $this->buildRedirect('/dashboard/social_media_scheduler/config');
     }
@@ -61,29 +59,25 @@ class Config extends DashboardPageController
         return $this->buildRedirect('/dashboard/social_media_scheduler/config');
     }
 
-
     public function test_channel($id): \Symfony\Component\HttpFoundation\RedirectResponse
     {
         if (!$this->token->validate('test_social_channel')) {
             $this->flash('error', $this->token->getErrorMessage());
             return $this->buildRedirect('/dashboard/social_media_scheduler/config');
         }
+
         $channel = $this->repository()->getChannel((int) $id);
         if (!$channel) {
             $this->flash('error', t('Channel not found.'));
             return $this->buildRedirect('/dashboard/social_media_scheduler/config');
         }
+
         try {
-            $sender = match ((string) $channel['channelType']) {
-                'telegram' => new TelegramSender(),
-                'listmonk' => new ListmonkSender(),
-                'matrix' => new MatrixSender(),
-                'webhook' => new WebhookSender(),
-                'bluesky' => new BlueskySender(),
-                'mastodon' => new MastodonSender(),
-                default => throw new \RuntimeException(t('Unsupported channel type.')),
-            };
-            $result = $sender->send($channel, t('ConcreteCMS Social Scheduler test'), '<p>' . htmlspecialchars(t('This is a test message from your ConcreteCMS Social Media Scheduler package.'), ENT_QUOTES, 'UTF-8') . '</p>');
+            $result = (new SenderRegistry())->get((string) $channel['channelType'])->send(
+                $channel,
+                t('ConcreteCMS Social Scheduler test'),
+                '<p>' . htmlspecialchars(t('This is a test message from your ConcreteCMS Social Media Scheduler package.'), ENT_QUOTES, 'UTF-8') . '</p>'
+            );
             $this->flash('success', t('Test sent: %s', $result));
         } catch (\Throwable $e) {
             $this->flash('error', t('Test failed: %s', $e->getMessage()));
@@ -98,9 +92,9 @@ class Config extends DashboardPageController
             $this->view();
             return;
         }
-        $token = trim((string) $this->post('bot_token'));
+
         try {
-            $this->set('telegramChats', (new TelegramSender())->getUpdates($token));
+            $this->set('telegramChats', (new TelegramSender())->getUpdates(trim((string) $this->post('bot_token'))));
             $this->set('refreshMessage', t('Telegram chats refreshed.'));
         } catch (\Throwable $e) {
             $this->error->add($e->getMessage());
@@ -149,7 +143,7 @@ class Config extends DashboardPageController
             'bluesky' => [
                 'handle' => trim((string) $this->post('bluesky_handle')),
                 'app_password' => (string) $this->post('bluesky_app_password'),
-                'service_url' => $this->normalizeBlueskyServiceUrl((string) $this->post('bluesky_service_url')),
+                'service_url' => BlueskySender::normalizeServiceUrl((string) $this->post('bluesky_service_url')),
                 'include_explicit_attachments' => (bool) $this->post('bluesky_include_explicit_attachments'),
             ],
             'mastodon' => [
@@ -190,23 +184,4 @@ class Config extends DashboardPageController
         }
         return $headers;
     }
-    public function normalizeBlueskyServiceUrl(string $url): string
-    {
-        $url = trim($url);
-        if ($url === '') {
-            return 'https://bsky.social';
-        }
-        if (!preg_match('#^https?://#i', $url)) {
-            $url = 'https://' . $url;
-        }
-        $parts = parse_url($url);
-        $host = strtolower((string) ($parts['host'] ?? ''));
-        if ($host === 'bsky.app' || $host === 'www.bsky.app') {
-            return 'https://bsky.social';
-        }
-        $scheme = strtolower((string) ($parts['scheme'] ?? 'https'));
-        return rtrim($scheme . '://' . $host, '/');
-    }
-
 }
-

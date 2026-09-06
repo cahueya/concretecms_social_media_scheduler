@@ -1,17 +1,19 @@
 # Social Media Scheduler for ConcreteCMS 9.4+
 
-Social Media Scheduler is a ConcreteCMS package for scheduled and recurring publishing to multiple communication and social-media channels.
+Social Media Scheduler is a ConcreteCMS package for scheduled and recurring publishing from the ConcreteCMS dashboard to multiple communication and social-media channels.
 
-Current version: **0.6.4**
+Current version: **0.6.6**
 
-The package is built for:
+Requirements:
 
-- **ConcreteCMS 9.4+**
-- **PHP 8+**
+- ConcreteCMS **9.4+**
+- PHP **8+**
+- PHP OpenSSL extension for secure storage of channel credentials
+- PHP cURL extension for external channel APIs
 
 ## Supported channels
 
-Version **0.6.4** supports:
+Version 0.6.6 exposes these channels:
 
 - Telegram via Bot API
 - Listmonk email campaigns
@@ -20,29 +22,27 @@ Version **0.6.4** supports:
 - Bluesky
 - Mastodon
 
-X/Twitter code is not exposed as a selectable channel in this release because the connector has not been fully verified with paid X API write access.
+`XSender.php` is intentionally retained for possible future X/Twitter support, but X/Twitter is **not selectable or registered as an active sender** in this release because write access has not been verified against a suitable X API plan.
 
-## What this package does
+## What the package does
 
-The package lets editors create reusable scheduled postings in the ConcreteCMS dashboard. Each posting can be sent once or repeatedly in a defined cycle.
-
-A posting has:
+Editors can create a posting once and either send it once or repeat it on a fixed day interval until its end date.
 
 | Field | Purpose |
 |---|---|
-| Title | Internal dashboard title. This is never sent. |
-| Subject | Public subject. Used as Listmonk email subject and as first line/part of social messages. |
+| Title | Internal dashboard title. Never sent to a channel. |
+| Subject | Public subject. Used as the Listmonk campaign subject and as the leading text for social/messenger channels. |
 | Body | Rich-text content from the ConcreteCMS editor. |
 | Start date/time | First scheduled send time. |
-| End date/time | Last date/time after which the posting will no longer be sent. |
+| End date/time | Last allowed send time. |
 | Repeat every X days | Recurrence interval. `0` means one-time posting. |
-| Timezone | Timezone used for the scheduled date/time. |
-| Attachments | Explicit ConcreteCMS File Manager attachments, mainly for Listmonk/email. |
-| Channels | Target channels selected for this posting. |
+| Timezone | Timezone used to interpret the entered schedule. |
+| Attachments | Explicit ConcreteCMS File Manager files. |
+| Channels | One or more configured target channels. |
+| Max attempts | Maximum attempts for a scheduled run. |
+| Retry delay | Delay before another attempt after a failed scheduled run. |
 
 ## Dashboard structure
-
-After installation the dashboard contains:
 
 ```text
 Dashboard
@@ -53,42 +53,22 @@ Dashboard
     └── Configuration
 ```
 
-The parent page **Social Media Scheduler** redirects to **Posts**.
+The parent page redirects to **Posts**.
 
 ## Installation
 
-1. Copy the folder `social_media_scheduler` into the ConcreteCMS `packages/` directory.
+1. Copy the package folder to `packages/social_media_scheduler`.
 2. Open **Dashboard > Extend Concrete > Add Functionality**.
 3. Install **Social Media Scheduler**.
 4. Open **Dashboard > Social Media Scheduler > Configuration**.
-5. Configure at least one channel.
-6. Create a posting at **Dashboard > Social Media Scheduler > Create**.
-7. Run the task manually or via cron.
+5. Add at least one channel.
+6. Create a posting under **Create**.
+7. Test the channel and/or use **Send now** before relying on automation.
+8. Run the ConcreteCMS task manually or through the normal task/cron runner.
 
-## Fresh install recommendation for 0.6.x
+### Upgrading from 0.6.5
 
-Version 0.6.0 introduced Doctrine ORM entities for package-owned persistence. Version 0.6.4 is the current clean release line after the pre-release 0.5.x builds.
-
-For a clean release setup, start from a fresh install:
-
-1. Back up any old pre-release data if needed.
-2. Uninstall the old pre-release package.
-3. Confirm that the package tables were removed.
-4. Install version 0.6.4.
-5. Recreate channel configurations and test postings.
-
-## Uninstall
-
-Uninstalling the package removes these package-owned tables:
-
-```text
-SocialMediaSchedulerPostingChannels
-SocialMediaSchedulerLog
-SocialMediaSchedulerChannels
-SocialMediaSchedulerPostings
-```
-
-Uninstalling deletes scheduled postings, channel configuration and send logs. Export or back up data first if it must be kept.
+0.6.6 is a scheduler-state bugfix release with no schema changes. Editing an existing posting no longer resets its next scheduled run to the original start date after the posting has already run. Active retry schedules are also preserved. Existing 0.6.x data remains usable through the standard ConcreteCMS package upgrade process.
 
 ## Automated task
 
@@ -98,105 +78,116 @@ Task handle:
 submit_social_postings
 ```
 
-The task sends all enabled postings whose `nextRunAt` value is due and whose end date has not passed.
+The task processes enabled postings whose `nextRunAt` is due and whose `endAt` has not passed.
 
-It can be run manually from the ConcreteCMS task dashboard or through the normal ConcreteCMS cron/task runner setup.
+For each due posting it:
 
-Task flow:
+1. loads only the data required for sending;
+2. resolves the selected enabled channels;
+3. sends the posting to each channel;
+4. writes one send log per channel attempt;
+5. schedules a retry when required;
+6. otherwise advances a recurring posting or disables a completed posting.
 
-1. Find due enabled postings.
-2. Find the selected enabled channels for each posting.
-3. Send the posting to every selected channel.
-4. Write a log entry for each channel attempt.
-5. Apply retry logic if a send fails.
-6. Advance the posting to the next cycle, or disable it if it is a one-time posting or if the next cycle would be after the end date.
+Dashboard previews are deliberately **not** generated by the background task.
 
 ## Media policy
 
-The package intentionally separates **body media** from **explicit attachments**.
+The package distinguishes between body media and explicit attachments.
 
 ### Body media
 
-Images inserted directly into the rich-text editor body are treated as content media.
-
-Example:
-
-```html
-<p>Text</p>
-<img src="/application/files/.../image.jpg">
-```
-
-These images are used by social and messenger channels as post media.
+Images inserted directly into the rich-text body are treated as post content. Social and messenger channels use these images as channel media.
 
 ### Explicit attachments
 
-Files selected with the attachment selector are treated as explicit attachments.
-
-They are primarily intended for Listmonk/email. Social and messenger channels ignore explicit attachments by default unless the channel option to include them is enabled.
-
-### Channel behavior
+Files selected with the ConcreteCMS File Manager are treated as explicit attachments. They are primarily intended for Listmonk/email. Telegram, Matrix, Bluesky and Mastodon ignore them by default unless the corresponding channel option explicitly includes them.
 
 | Channel | Body images | Explicit attachments |
 |---|---|---|
-| Listmonk | Inline newsletter images | Campaign media/attachments |
-| Telegram | Sent as media after or with message | Ignored by default; optional |
-| Matrix | Sent as separate Matrix media events | Ignored by default; optional |
-| Bluesky | Sent as image embeds, max. 4 | Ignored by default; optional |
-| Mastodon | Uploaded as status media | Ignored by default; optional |
-| Webhook | Included as structured payload data | Included as structured payload data |
+| Listmonk | Uploaded and embedded inline | Uploaded as campaign media/attachments |
+| Telegram | Sent through Bot API media methods | Optional |
+| Matrix | Uploaded and sent as Matrix media events | Optional |
+| Bluesky | Uploaded as image embeds, maximum 4 | Optional |
+| Mastodon | Uploaded and attached to the status | Optional |
+| Webhook | Body remains in structured posting content | Included in the attachment payload; transfer mode is configurable |
 
 ## Channel setup summary
 
-| Channel | Required credentials |
+| Channel | Main configuration |
 |---|---|
-| Telegram | Bot token and chat ID. Chat discovery can use Telegram `getUpdates`. |
-| Listmonk | Base URL, API username and API token/password. |
-| Matrix | Homeserver URL, access token and room ID. |
-| Generic Webhook | URL, method and optional auth headers/basic/bearer credentials. |
-| Bluesky | Handle and App Password. API/PDS URL should normally be `https://bsky.social`, not `https://bsky.app`. |
-| Mastodon | Instance URL and Access Token. |
+| Telegram | Bot token, chat/group/channel IDs, parse mode |
+| Listmonk | Base URL, API username/token, list IDs, optional template/from/messenger settings |
+| Matrix | Homeserver URL, access token, room IDs |
+| Generic Webhook | URL, HTTP method, payload mode, attachment mode, optional authentication/headers |
+| Bluesky | Handle, App Password, PDS/API service URL |
+| Mastodon | Instance URL, access token, visibility and optional language/content-warning settings |
 
-## Basic usage
+See [`docs/CHANNELS.md`](docs/CHANNELS.md) for channel-specific behavior.
 
-1. Configure channels in **Configuration**.
-2. Create a posting in **Create**.
-3. Use **Title** for internal dashboard organisation.
-4. Use **Subject** for the public email/social subject.
-5. Put text and post images into the rich-text editor.
-6. Use explicit attachments mainly for Listmonk/email.
-7. Choose the target channels.
-8. Save the posting.
-9. Run the task manually for testing or let cron process it.
-10. Check **Logs** for channel responses.
+## Logs and retries
 
-## Security notes
+The **Logs** page can filter by posting, channel and status. The posting filter uses a lightweight posting list and does not resolve media or previews.
 
-- Secret channel configuration values are stored encrypted in `configJson`.
-- Non-secret endpoint URLs may be stored in `publicEndpointUrl` for visibility and filtering.
-- Use app passwords or dedicated API tokens wherever possible.
-- Do not use personal master passwords when a platform supports app-specific credentials.
-- Review channel permissions before enabling automated posting.
+Scheduled sends use `maxAttempts` and `retryDelayMinutes`. A retry is not scheduled beyond the posting end date. Manual **Send now** operations are logged separately and do not change the recurrence schedule.
 
-## Developer notes
+Editing a posting preserves its scheduler state once the posting has completed a scheduled run or entered retry handling. Before the first scheduled attempt, changing the start date/time also moves the initial `nextRunAt`.
 
-Version 0.6.x moves package-owned persistence to Doctrine ORM entities while keeping the tested sender/channel behavior from the stable 0.5.10 line.
+## Security
 
-Persistence entities:
+- Channel configuration is stored encrypted in `configJson` using AES-256-CBC when written by current releases.
+- OpenSSL is required for saving channel credentials; the package no longer silently writes new credentials as Base64 when encryption is unavailable.
+- Legacy Base64 configuration values can still be read for compatibility.
+- Non-secret endpoint URLs may also be stored in `publicEndpointUrl` for dashboard visibility.
+- Prefer dedicated app passwords and API tokens with the minimum required permissions.
 
-- `src/Entity/Channel.php` → `SocialMediaSchedulerChannels`
-- `src/Entity/Posting.php` → `SocialMediaSchedulerPostings`
-- `src/Entity/PostingChannel.php` → `SocialMediaSchedulerPostingChannels`
-- `src/Entity/SendLog.php` → `SocialMediaSchedulerLog`
+## Persistence
 
-The package controller registers the entity path through ConcreteCMS' package provider mechanism. Installation and dashboard/page setup are orchestrated by `src/Package/Installer.php`.
+Package-owned Doctrine entities:
 
-## Documentation
+| Entity | Table |
+|---|---|
+| `src/Entity/Channel.php` | `SocialMediaSchedulerChannels` |
+| `src/Entity/Posting.php` | `SocialMediaSchedulerPostings` |
+| `src/Entity/PostingChannel.php` | `SocialMediaSchedulerPostingChannels` |
+| `src/Entity/SendLog.php` | `SocialMediaSchedulerLog` |
+
+ConcreteCMS' normal package/entity lifecycle is used for schema management. The package installer is limited to package pages, task metadata, display order and uninstall cleanup.
+
+## Uninstall
+
+Uninstalling removes the package-owned tables and therefore deletes channel configuration, postings, posting/channel mappings and send logs. Back up data first if it must be retained.
+
+## Developer structure
+
+```text
+controller.php
+controllers/single_page/dashboard/social_media_scheduler/
+single_pages/dashboard/social_media_scheduler/
+src/
+  Dashboard/PostingController.php
+  Entity/
+  Package/Installer.php
+  Post/Repository.php
+  Scheduler/PostingRunner.php
+  Service/Channel/
+```
+
+Notable cleanup in 0.6.5:
+
+- shared create/edit posting parsing and validation;
+- shared create/edit posting form partial;
+- lightweight repository query for log filter choices;
+- bulk channel loading for dashboard and scheduled posting lists;
+- no preview generation in scheduler/manual-send hydration;
+- central active sender registry;
+- no unused sender `supports()` methods;
+- no legacy attachment POST parsing;
+- no obsolete manual ORM schema repair layer;
+- no per-version release-note files.
 
 Additional documentation:
 
-- `docs/ARCHITECTURE.md`
-- `docs/CHANNELS.md`
-- `docs/RELEASE_NOTES_0.6.4.md`
-- `docs/RELEASE_NOTES_0.6.3.md`
-- `docs/RELEASE_NOTES_0.6.2.md`
-- `CHANGELOG.md`
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- [`docs/CHANNELS.md`](docs/CHANNELS.md)
+- [`CHANGELOG.md`](CHANGELOG.md)

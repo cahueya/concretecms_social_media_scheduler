@@ -37,7 +37,7 @@ class Logs extends DashboardPageController
             'status' => (string) $this->get('filterStatus'),
         ];
         $this->set('allChannels', $repo->getChannels(false));
-        $this->set('postings', $repo->getPostings());
+        $this->set('postings', $repo->getPostingChoices());
         $this->set('logs', $repo->getLogs(250, $filters));
         $this->set('logFilters', $filters);
     }

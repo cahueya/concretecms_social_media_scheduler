@@ -9,10 +9,6 @@ class XSender implements ChannelSenderInterface
     public const MAX_IMAGES = 4;
     public const MAX_IMAGE_BYTES = 5000000;
 
-    public function supports(string $type): bool
-    {
-        return $type === 'x' || $type === 'twitter';
-    }
 
     public function send(array $channel, string $subject, string $bodyHtml, array $attachments = []): string
     {
@@ -39,7 +35,7 @@ class XSender implements ChannelSenderInterface
         $socialMedia = $helper->buildSocialMediaAttachments($bodyHtml, $attachments, $includeExplicitAttachments);
         $cleanBodyHtml = $helper->removeAllImageTags($bodyHtml);
 
-        $plain = $this->htmlToText($cleanBodyHtml);
+        $plain = TextNormalizer::htmlToText($cleanBodyHtml);
         $text = $this->trimPostText(trim($subject . "\n\n" . $plain));
         if ($text === '') {
             $text = $this->trimPostText($subject !== '' ? $subject : 'Post');
@@ -220,15 +216,6 @@ class XSender implements ChannelSenderInterface
         }
         usort($pairs, static fn(array $a, array $b): int => $a[0] === $b[0] ? strcmp($a[1], $b[1]) : strcmp($a[0], $b[0]));
         return implode('&', array_map(static fn(array $pair): string => $pair[0] . '=' . $pair[1], $pairs));
-    }
-
-    public function htmlToText(string $html): string
-    {
-        $text = str_ireplace(['<br>', '<br/>', '<br />', '</p>', '</div>', '</li>'], "\n", $html);
-        $text = html_entity_decode(strip_tags($text), ENT_QUOTES, 'UTF-8');
-        $text = preg_replace('/[ \t]+/', ' ', (string) $text);
-        $text = preg_replace('/\n{3,}/', "\n\n", (string) $text);
-        return trim((string) $text);
     }
 
     public function trimPostText(string $text): string
